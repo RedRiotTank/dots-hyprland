@@ -40,7 +40,8 @@ Item {
         {
             key: "social",
             icon: "dynamic_feed",
-            name: Translation.tr("Social"),
+            iconSource: "reddit.svg",
+            name: Translation.tr("Reddit"),
             component: socialFeed,
             available: true,
         },
@@ -56,6 +57,7 @@ Item {
     readonly property var visibleTabs: root.tabDefinitions.filter(tab => tab.available && root.tabVisible(tab.key))
     property var tabButtonList: root.visibleTabs.map(tab => ({
         icon: tab.icon,
+        iconSource: tab.iconSource ?? "",
         name: tab.name,
         pageIndex: root.tabDefinitions.indexOf(tab),
     }))
@@ -157,6 +159,7 @@ Item {
                     current: index == tabBar.currentIndex
                     text: current ? modelData.name : ""
                     materialSymbol: modelData.icon
+                    iconSource: modelData.iconSource ?? ""
                     horizontalPadding: 10
                     onClicked: tabBar.setCurrentIndex(index)
 
@@ -292,7 +295,15 @@ Item {
                                     }
                                     spacing: 10
 
+                                    CustomIcon {
+                                        visible: (tabSettingRow.modelData.iconSource ?? "").length > 0
+                                        source: tabSettingRow.modelData.iconSource ?? ""
+                                        width: 24
+                                        height: 24
+                                    }
+
                                     MaterialSymbol {
+                                        visible: (tabSettingRow.modelData.iconSource ?? "").length === 0
                                         text: tabSettingRow.modelData.icon
                                         iconSize: Appearance.font.pixelSize.large
                                         color: tabSettingRow.modelData.available

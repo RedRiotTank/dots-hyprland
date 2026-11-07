@@ -18,7 +18,7 @@ Item {
     property string errorText: ""
     property bool showingCache: false
 
-    readonly property string helperPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/social/reddit_rss.py`
+    readonly property string helperPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/social/reddit_feed.py`
 
     function normalizeSubreddit(value) {
         let result = value.trim();
@@ -81,10 +81,10 @@ Item {
             Layout.maximumHeight: 40
             spacing: 6
 
-            MaterialSymbol {
-                text: "dynamic_feed"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnLayer1
+            CustomIcon {
+                source: "reddit.svg"
+                width: Appearance.font.pixelSize.large
+                height: Appearance.font.pixelSize.large
             }
 
             ToolbarTextField {
@@ -128,7 +128,7 @@ Item {
                 icon: "dynamic_feed"
                 title: root.errorText.length > 0
                     ? Translation.tr("Could not load the feed")
-                    : Translation.tr("Social feed")
+                    : Translation.tr("Reddit feed")
                 description: root.errorText.length > 0
                     ? root.errorText
                     : Translation.tr("Refresh to load posts from Reddit")
