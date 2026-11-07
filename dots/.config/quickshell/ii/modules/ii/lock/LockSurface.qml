@@ -29,7 +29,7 @@ MouseArea {
         onRunningChanged: {
             if (!cavaProc.running) root.visualizerPoints = [];
         }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
+        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/lock_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
                 root.visualizerPoints = data.split(";")
@@ -127,20 +127,19 @@ MouseArea {
             rightMargin: parent.width * 0.08
             bottomMargin: 90
         }
-        height: 190
-        opacity: (GlobalStates.screenLocked && root.mediaPlaying) ? 0.55 : 0
+        height: 170
+        opacity: (GlobalStates.screenLocked && root.mediaPlaying) ? 0.95 : 0
         visible: opacity > 0
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
-        WaveVisualizer {
+        BarVisualizer {
             anchors.fill: parent
             points: root.visualizerPoints
-            live: GlobalStates.screenLocked && root.mediaPlaying
             maxVisualizerValue: 1000
-            smoothing: 3
+            smoothing: 1
             color: Appearance.colors.colPrimary
         }
     }

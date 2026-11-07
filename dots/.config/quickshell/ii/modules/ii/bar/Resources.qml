@@ -2,6 +2,7 @@ import qs.modules.common
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 
 MouseArea {
     id: root
@@ -10,6 +11,12 @@ MouseArea {
     implicitWidth: rowLayout.implicitWidth + rowLayout.anchors.leftMargin + rowLayout.anchors.rightMargin
     implicitHeight: Appearance.sizes.barHeight
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    cursorShape: Qt.PointingHandCursor
+
+    onClicked: Quickshell.execDetached([
+        "bash", "-c",
+        `${Config.options.apps.terminal} btop`
+    ])
 
     RowLayout {
         id: rowLayout

@@ -84,6 +84,9 @@ Scope {
         function spawnFloatingImage(): void {
             OverlayContext.spawnFloatingImage();
         }
+        function pickFloatingImage(): void {
+            OverlayContext.pickFloatingImage();
+        }
         function closeFloatingImages(): void {
             OverlayContext.closeAllFloatingImages();
         }
