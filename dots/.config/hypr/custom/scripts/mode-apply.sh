@@ -64,6 +64,18 @@ if [[ -f "$SHELL_CONFIG" ]]; then
     jq --argjson weeb "$weeb_value" --arg wallpaper "$wallpaper" \
         '.policies.weeb = $weeb | .background.wallpaperPath = $wallpaper' \
         "$SHELL_CONFIG" > "$tmp" && mv "$tmp" "$SHELL_CONFIG"
+
+    # Seed the floating image list with the requested GIF on first use.
+    miku_gif="$HOME/Pictures/Wallpapers/miku.gif"
+    if [[ "$mode" == "weeb" && -f "$miku_gif" ]]; then
+        sources_count="$(jq -r '(.overlay.floatingImage.sources // []) | length' "$SHELL_CONFIG")"
+        if [[ "$sources_count" == "0" ]]; then
+            tmp="$(mktemp)"
+            jq --arg miku "$miku_gif" \
+                '.overlay.floatingImage.sources = [$miku] | .overlay.floatingImage.imageSource = $miku' \
+                "$SHELL_CONFIG" > "$tmp" && mv "$tmp" "$SHELL_CONFIG"
+        fi
+    fi
 fi
 
 # Keep waypaper pointed at the current mode folder. Its post-command routes
