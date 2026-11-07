@@ -13,6 +13,8 @@ Singleton {
     // 10 minute
     readonly property int fetchInterval: Config.options.bar.weather.fetchInterval * 60 * 1000
     readonly property string city: Config.options.bar.weather.city
+    readonly property real latitude: Config.options.bar.weather.latitude ?? 0
+    readonly property real longitude: Config.options.bar.weather.longitude ?? 0
     readonly property bool useUSCS: Config.options.bar.weather.useUSCS
     property bool gpsActive: Config.options.bar.weather.enableGPS
 
@@ -85,6 +87,8 @@ Singleton {
 
         if (root.gpsActive && root.location.valid) {
             command += `/${root.location.lat},${root.location.long}`;
+        } else if (root.latitude !== 0 || root.longitude !== 0) {
+            command += `/${root.latitude},${root.longitude}`;
         } else {
             command += `/${formatCityName(root.city)}`;
         }

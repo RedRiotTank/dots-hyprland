@@ -28,6 +28,11 @@ MouseArea {
         }
     }
 
+    onClicked: (mouse) => {
+        if (mouse.button === Qt.LeftButton)
+            citySearchPopup.toggle();
+    }
+
     RowLayout {
         id: rowLayout
         anchors.centerIn: parent
@@ -52,5 +57,10 @@ MouseArea {
     WeatherPopup {
         id: weatherPopup
         hoverTarget: root
+    }
+
+    CitySearchPopup {
+        id: citySearchPopup
+        anchorItem: root
     }
 }

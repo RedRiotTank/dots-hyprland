@@ -271,6 +271,8 @@ Singleton {
                     property bool enable: false
                     property bool enableGPS: false // gps based location
                     property string city: "Maracena" // When 'enableGPS' is false
+                    property real latitude: 0 // Used when set by the city search
+                    property real longitude: 0
                     property bool useUSCS: false // Instead of metric (SI) units
                     property int fetchInterval: 10 // minutes
                 }
@@ -421,9 +423,6 @@ Singleton {
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
-                    // One image/GIF path or URL per entry. Each click on the
-                    // overlay image button spawns the next one in the list.
-                    property list<string> sources: []
                 }
             }
 

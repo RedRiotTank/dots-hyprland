@@ -25,6 +25,8 @@ AbstractOverlayWidget {
     property bool fancyBorders: true
     property bool showCenterButton: false
     property bool showClickabilityButton: true
+    property bool showImagePickerButton: false
+    signal imagePickerRequested()
 
     // Defaults n stuff
     required property var modelData
@@ -271,6 +273,15 @@ AbstractOverlayWidget {
                         onClicked: root.center()
                         StyledToolTip {
                             text: "Center"
+                        }
+                    }
+
+                    TitlebarButton {
+                        visible: root.showImagePickerButton
+                        materialSymbol: "add_photo_alternate"
+                        onClicked: root.imagePickerRequested()
+                        StyledToolTip {
+                            text: "Change image source"
                         }
                     }
 
