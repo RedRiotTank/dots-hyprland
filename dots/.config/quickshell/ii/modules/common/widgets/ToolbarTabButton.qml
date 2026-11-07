@@ -10,6 +10,7 @@ RippleButton {
     id: root
     required property string materialSymbol
     required property bool current
+    property string iconSource: ""
     horizontalPadding: 10
 
     implicitHeight: 40
@@ -25,8 +26,17 @@ RippleButton {
         anchors.centerIn: parent
         spacing: 6
 
+        CustomIcon {
+            id: imageIcon
+            visible: root.iconSource.length > 0
+            width: visible ? 22 : 0
+            height: 22
+            source: root.iconSource
+        }
         MaterialSymbol {
             id: icon
+            visible: root.iconSource.length === 0
+            width: visible ? implicitWidth : 0
             anchors.verticalCenter: parent.verticalCenter
             iconSize: 22
             text: root.materialSymbol
