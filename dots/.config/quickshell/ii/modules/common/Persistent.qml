@@ -68,6 +68,16 @@ Singleton {
             }
 
             property JsonObject sidebar: JsonObject {
+                property JsonObject leftPanel: JsonObject {
+                    property bool ai: true
+                    property bool translator: true
+                    property bool anime: true
+                    property bool social: true
+                    property bool lyrics: true
+                }
+                property JsonObject social: JsonObject {
+                    property string subreddit: "unixporn"
+                }
                 property JsonObject bottomGroup: JsonObject {
                     property bool collapsed: false
                     property int tab: 0

@@ -30,7 +30,10 @@ Button {
         id: imageDownloader
         running: root.manualDownload
         filePath: root.filePath
-        sourceUrl: root.imageData.preview_url ?? root.imageData.sample_url
+        // Use the sample/file URL instead of the tiny preview thumbnail.
+        sourceUrl: root.imageData.sample_url
+            ?? root.imageData.file_url
+            ?? root.imageData.preview_url
         onDone: (path, width, height) => {
             imageObject.source = ""
             imageObject.source = path
@@ -65,8 +68,10 @@ Button {
             anchors.fill: parent
             width: root.rowHeight * modelData.aspect_ratio
             height: root.rowHeight
-            fillMode: Image.PreserveAspectFit
-            source: modelData.preview_url
+            fillMode: Image.PreserveAspectCrop
+            source: modelData.sample_url
+                ?? modelData.file_url
+                ?? modelData.preview_url
 
             layer.enabled: true
             layer.effect: OpacityMask {
