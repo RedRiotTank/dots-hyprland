@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import Quickshell
+import Quickshell.Io
 import qs.modules.common
 
 Singleton {
@@ -23,7 +24,10 @@ Singleton {
         { identifier: "volumeMixer", materialSymbol: "volume_up" },
     ]
 
-    readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.length > 0
+    readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.some(identifier => {
+        const base = root.baseIdentifier(identifier);
+        return root.availableWidgets.some(widget => widget.identifier === base);
+    })
 
     property list<string> pinnedWidgetIdentifiers: []
     property list<var> clickableWidgets: []
@@ -53,7 +57,7 @@ Singleton {
         return sources[index % sources.length] ?? "";
     }
 
-    function spawnFloatingImage(): string {
+    function spawnFloatingImage(source = ""): string {
         if (!root.floatingImagesEnabled) return "";
 
         for (let index = 1; index <= root.maxFloatingImages; ++index) {
@@ -63,7 +67,9 @@ Singleton {
             const state = Persistent.states.overlay[identifier];
             if (!state) continue;
 
-            state.imageSource = root.floatingImageSourceFor(root.floatingImageSpawnCounter);
+            state.imageSource = source.length > 0
+                ? source
+                : root.floatingImageSourceFor(root.floatingImageSpawnCounter);
             root.floatingImageSpawnCounter += 1;
             state.pinned = false;
             state.clickthrough = false;
@@ -72,6 +78,31 @@ Singleton {
             return identifier;
         }
         return "";
+    }
+
+    function pickFloatingImage(): void {
+        if (!root.floatingImagesEnabled) return;
+        pickImageProcess.running = true;
+    }
+
+    Process {
+        id: pickImageProcess
+        running: false
+        command: ["bash", "-c", `
+            command -v kdialog >/dev/null 2>&1 || {
+                notify-send -a "Floating image" -i "dialog-error" "kdialog is not installed"
+                exit 1
+            }
+            kdialog --title "Select floating image" \\
+                --getopenfilename "$HOME/Pictures" \\
+                "Images (*.png *.jpg *.jpeg *.gif *.webp *.avif *.bmp)"
+        `]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const path = text.trim();
+                if (path.length > 0) root.spawnFloatingImage(path);
+            }
+        }
     }
 
     function closeAllFloatingImages(): void {

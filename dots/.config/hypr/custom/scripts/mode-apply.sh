@@ -108,10 +108,8 @@ if [[ -x "$SWITCHWALL" && -f "$wallpaper" ]]; then
     "$SWITCHWALL" --image "$wallpaper" --mode dark >/dev/null 2>&1 || true
 fi
 
-# Floating images are a weeb-only feature.
-if [[ "$mode" == "sober" ]]; then
-    qs -c ii ipc call overlay closeFloatingImages >/dev/null 2>&1 || true
-fi
+# Floating images are hidden in sober mode by the shell itself. Their state is
+# intentionally left untouched so they come back exactly as they were.
 
 notify-send -a "Illogical Impulse" -i "preferences-desktop-theme" \
     "Mode: $label" "Wallpaper: $(basename "$wallpaper")" >/dev/null 2>&1 || true

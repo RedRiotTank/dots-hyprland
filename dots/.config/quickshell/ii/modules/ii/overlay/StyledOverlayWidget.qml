@@ -78,6 +78,18 @@ AbstractOverlayWidget {
     y: Math.round(persistentStateEntry.y) // Round or it'll be blurry
     pinned: persistentStateEntry.pinned
     clickthrough: persistentStateEntry.clickthrough
+
+    // The x/y bindings above are broken as soon as the widget is dragged.
+    // Restore them when the delegate is reused for another widget, otherwise
+    // closing one floating image can move the remaining ones.
+    function restorePosition() {
+        if (!root.persistentStateEntry) return;
+        if (root.resizing) return;
+        root.x = Math.round(root.persistentStateEntry.x);
+        root.y = Math.round(root.persistentStateEntry.y);
+    }
+    onIdentifierChanged: restorePosition()
+    onPersistentStateEntryChanged: restorePosition()
     drag {
         minimumX: 0
         minimumY: 0
@@ -101,6 +113,7 @@ AbstractOverlayWidget {
 
     // Self-registeration with OverlayContext
     Component.onCompleted: {
+        restorePosition();
         reportPinnedState();
         reportClickableState();
     }
