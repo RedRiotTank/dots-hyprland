@@ -31,6 +31,9 @@ case "${SKIP_FISH}" in
   true) true;;
   *)
     install_dir__sync_exclude dots/.config/fish "$XDG_CONFIG_HOME"/fish "conf.d"
+    # conf.d is intentionally user-owned: copy missing snippets without
+    # overwriting snippets the user already has.
+    rsync_dir__ignore_existing dots/.config/fish/conf.d "${XDG_CONFIG_HOME}"/fish/conf.d
     ;;
 esac
 
