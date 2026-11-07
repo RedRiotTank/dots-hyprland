@@ -86,6 +86,7 @@ Scope {
             SearchWidget {
                 id: searchWidget
                 anchors.horizontalCenter: parent.horizontalCenter
+                navigationHandler: overviewLoader.item
                 Synchronizer on searchingText {
                     property alias source: panelWindow.searchingText
                 }

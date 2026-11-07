@@ -421,6 +421,9 @@ Singleton {
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
+                    // One image/GIF path or URL per entry. Each click on the
+                    // overlay image button spawns the next one in the list.
+                    property list<string> sources: []
                 }
             }
 

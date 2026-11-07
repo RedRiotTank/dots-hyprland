@@ -81,6 +81,12 @@ Scope {
         function toggle(): void {
             GlobalStates.overlayOpen = !GlobalStates.overlayOpen;
         }
+        function spawnFloatingImage(): void {
+            OverlayContext.spawnFloatingImage();
+        }
+        function closeFloatingImages(): void {
+            OverlayContext.closeAllFloatingImages();
+        }
     }
 
     GlobalShortcut {

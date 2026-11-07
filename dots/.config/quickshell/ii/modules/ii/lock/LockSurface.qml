@@ -10,6 +10,7 @@ import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.SystemTray
 
 MouseArea {
@@ -18,6 +19,25 @@ MouseArea {
     property bool active: false
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
+    readonly property bool mediaPlaying: MprisController.activePlayer?.isPlaying ?? false
+    property list<real> visualizerPoints: []
+
+    // Audio visualizer shown while media is playing on the lock screen.
+    Process {
+        id: cavaProc
+        running: GlobalStates.screenLocked && root.mediaPlaying
+        onRunningChanged: {
+            if (!cavaProc.running) root.visualizerPoints = [];
+        }
+        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
+        stdout: SplitParser {
+            onRead: data => {
+                root.visualizerPoints = data.split(";")
+                    .map(point => parseFloat(point.trim()))
+                    .filter(point => !isNaN(point));
+            }
+        }
+    }
 
     // Force focus on entry
     function forceFieldFocus() {
@@ -95,6 +115,35 @@ MouseArea {
     //         text: "[[ DEBUG BYPASS ]]"
     //     }
     // }
+
+    // Cava visualizer at the bottom, only while media is playing.
+    Item {
+        id: visualizerContainer
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            leftMargin: parent.width * 0.08
+            rightMargin: parent.width * 0.08
+            bottomMargin: 90
+        }
+        height: 190
+        opacity: (GlobalStates.screenLocked && root.mediaPlaying) ? 0.55 : 0
+        visible: opacity > 0
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        WaveVisualizer {
+            anchors.fill: parent
+            points: root.visualizerPoints
+            live: GlobalStates.screenLocked && root.mediaPlaying
+            maxVisualizerValue: 1000
+            smoothing: 3
+            color: Appearance.colors.colPrimary
+        }
+    }
 
     // Main toolbar: password box
     Toolbar {

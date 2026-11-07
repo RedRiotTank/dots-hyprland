@@ -52,7 +52,126 @@ Item {
 
     property Component windowComponent: OverviewWindow {}
     property list<OverviewWindow> windowWidgets: []
-    
+    property string selectedWindowAddress: ""
+
+    // Windows that can be reached with the arrow keys in the current
+    // workspace group. Coordinates are relative to the overview canvas.
+    readonly property var selectableWindows: {
+        const result = [];
+        const groupStart = root.workspaceGroup * root.workspacesShown;
+        const groupEnd = groupStart + root.workspacesShown;
+        for (const toplevel of ToplevelManager.toplevels.values) {
+            const address = `0x${toplevel.HyprlandToplevel?.address}`;
+            const windowData = root.windowByAddress[address];
+            if (!windowData) continue;
+            if (!windowData.at || !windowData.size) continue;
+            if (windowData.monitor !== root.monitor?.id) continue;
+            if (!(windowData.workspace.id > groupStart && windowData.workspace.id <= groupEnd)) continue;
+            const monitorData = HyprlandData.monitors.find(monitor => monitor.id === windowData.monitor);
+            if (!monitorData) continue;
+
+            const column = getWsColumn(windowData.workspace.id);
+            const row = getWsRow(windowData.workspace.id);
+            const cellX = column * (root.workspaceImplicitWidth + root.workspaceSpacing);
+            const cellY = row * (root.workspaceImplicitHeight + root.workspaceSpacing);
+            const centerX = (windowData.at[0] + windowData.size[0] / 2 - monitorData.x - monitorData.reserved[0]) * root.scale + cellX;
+            const centerY = (windowData.at[1] + windowData.size[1] / 2 - monitorData.y - monitorData.reserved[1]) * root.scale + cellY;
+
+            result.push({
+                address: windowData.address,
+                centerX: centerX,
+                centerY: centerY,
+                workspace: windowData.workspace.id,
+            });
+        }
+        return result;
+    }
+
+    function selectedWindow() {
+        return root.selectableWindows.find(window => window.address === root.selectedWindowAddress) ?? null;
+    }
+
+    function resetSelection() {
+        if (root.selectableWindows.length === 0) {
+            root.selectedWindowAddress = "";
+            return;
+        }
+        const onActiveWorkspace = root.selectableWindows.find(window => window.workspace === root.effectiveActiveWorkspaceId);
+        root.selectedWindowAddress = (onActiveWorkspace ?? root.selectableWindows[0]).address;
+    }
+
+    function ensureSelection() {
+        if (!root.selectedWindow()) root.resetSelection();
+    }
+
+    function moveSelection(direction) {
+        root.ensureSelection();
+        const current = root.selectedWindow();
+        if (!current) return false;
+
+        let best = null;
+        let bestScore = Infinity;
+        for (const candidate of root.selectableWindows) {
+            if (candidate.address === current.address) continue;
+            const dx = candidate.centerX - current.centerX;
+            const dy = candidate.centerY - current.centerY;
+            let primary = 0;
+            let secondary = 0;
+
+            if (direction === "left") {
+                if (dx >= -1) continue;
+                primary = -dx;
+                secondary = Math.abs(dy);
+            } else if (direction === "right") {
+                if (dx <= 1) continue;
+                primary = dx;
+                secondary = Math.abs(dy);
+            } else if (direction === "up") {
+                if (dy >= -1) continue;
+                primary = -dy;
+                secondary = Math.abs(dx);
+            } else if (direction === "down") {
+                if (dy <= 1) continue;
+                primary = dy;
+                secondary = Math.abs(dx);
+            } else {
+                return false;
+            }
+
+            const score = primary * primary + secondary * secondary * 4;
+            if (score < bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
+        }
+
+        if (!best) return false;
+        root.selectedWindowAddress = best.address;
+        return true;
+    }
+
+    function activateSelected() {
+        const current = root.selectedWindow();
+        if (!current) return false;
+        GlobalStates.overviewOpen = false;
+        // This widget is destroyed when the overview closes, so let a detached
+        // process focus the window after the focus grab has been released.
+        Quickshell.execDetached([
+            "bash", "-c",
+            `sleep 0.12; hyprctl dispatch 'hl.dsp.focus({ window = "address:${current.address}" })'`
+        ]);
+        return true;
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen) root.resetSelection();
+        }
+    }
+
+    Component.onCompleted: root.resetSelection()
+
     function getWsRow(ws) {
         // 1-indexed workspace, 0-indexed row
         var normalRow = Math.floor((ws - 1) / Config.options.overview.columns) % Config.options.overview.rows;
@@ -195,6 +314,7 @@ Item {
                     scale: root.scale
                     widgetMonitor: HyprlandData.monitors.find(m => m.id == root.monitor.id)
                     windowData: windowByAddress[address]
+                    selected: root.selectedWindowAddress === windowData.address
 
                     property bool atInitPosition: (initX == x && initY == y)
 
