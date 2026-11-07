@@ -53,9 +53,9 @@ Item {
 
         Repeater {
             model: ScriptModel {
-                values: Persistent.states.overlay.open.map(identifier => {
-                    return OverlayContext.availableWidgets.find(w => w.identifier === identifier);
-                })
+                values: Persistent.states.overlay.open
+                    .map(identifier => OverlayContext.definitionFor(identifier))
+                    .filter(entry => entry !== null)
                 objectProp: "identifier"
             }
             delegate: OverlayWidgetDelegateChooser {

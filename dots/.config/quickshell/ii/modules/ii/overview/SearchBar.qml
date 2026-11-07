@@ -14,6 +14,8 @@ RowLayout {
     property bool animateWidth: false
     property alias searchInput: searchInput
     property string searchingText
+    // Optional object exposing moveSelection(direction) and activateSelected().
+    property var navigationHandler: null
 
     function forceFocus() {
         searchInput.forceActiveFocus();
@@ -81,6 +83,7 @@ RowLayout {
         onTextChanged: LauncherSearch.query = text
 
         onAccepted: {
+            if (root.searchingText === "" && root.navigationHandler) return;
             if (appResults.count > 0) {
                 // Get the first visible delegate and trigger its click
                 let firstItem = appResults.itemAtIndex(0);
@@ -91,6 +94,26 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            // With an empty query the overview shows window previews, so the
+            // arrow keys move the window selection instead of the text cursor.
+            if (root.searchingText === "" && root.navigationHandler) {
+                let direction = "";
+                if (event.key === Qt.Key_Left) direction = "left";
+                else if (event.key === Qt.Key_Right) direction = "right";
+                else if (event.key === Qt.Key_Up) direction = "up";
+                else if (event.key === Qt.Key_Down) direction = "down";
+                if (direction !== "") {
+                    root.navigationHandler.moveSelection(direction);
+                    event.accepted = true;
+                    return;
+                }
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    root.navigationHandler.activateSelected();
+                    event.accepted = true;
+                    return;
+                }
+            }
+
             if (event.key === Qt.Key_Tab) {
                 if (LauncherSearch.results.length === 0) return;
                 const tabbedText = LauncherSearch.results[0].name;

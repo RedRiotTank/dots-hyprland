@@ -16,7 +16,7 @@ import qs.modules.ii.overlay.notes
 
 DelegateChooser {
     id: root
-    role: "identifier"
+    role: "baseIdentifier"
 
     DelegateChoice { roleValue: "crosshair"; Crosshair {} }
     DelegateChoice { roleValue: "floatingImage"; FloatingImage {} }

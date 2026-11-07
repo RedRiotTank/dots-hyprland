@@ -118,9 +118,23 @@ Rectangle {
 
         Layout.alignment: Qt.AlignVCenter
 
-        toggled: Persistent.states.overlay.open.includes(identifier)
-        altAction: () => OverlayContext.requestCenter(identifier)
+        readonly property bool floatingImageSpawner: identifier === "floatingImage"
+
+        toggled: floatingImageSpawner
+            ? Persistent.states.overlay.open.some(openIdentifier => openIdentifier.startsWith("floatingImage"))
+            : Persistent.states.overlay.open.includes(identifier)
+        altAction: () => {
+            if (floatingImageSpawner) {
+                OverlayContext.closeAllFloatingImages();
+            } else {
+                OverlayContext.requestCenter(identifier);
+            }
+        }
         onClicked: {
+            if (floatingImageSpawner) {
+                OverlayContext.spawnFloatingImage();
+                return;
+            }
             if (widgetButton.toggled) {
                 Persistent.states.overlay.open = Persistent.states.overlay.open.filter(type => type !== identifier);
             } else {

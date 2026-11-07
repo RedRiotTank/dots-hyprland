@@ -13,10 +13,12 @@ StyledOverlayWidget {
     resizable: false
     clickthrough: true
 
-    property string imageSource: Config.options.overlay.floatingImage.imageSource
-    property real scaleFactor: Config.options.overlay.floatingImage.scale
+    property string imageSource: root.persistentStateEntry.imageSource || Config.options.overlay.floatingImage.imageSource
+    property real scaleFactor: root.persistentStateEntry.scale ?? Config.options.overlay.floatingImage.scale
     property int imageWidth: 0
     property int imageHeight: 0
+    property bool remoteSource: /^https?:\/\//.test(root.imageSource)
+    readonly property bool validSource: root.imageSource.length > 0
 
     // Override to always save 0 size
     function savePosition(xPos = root.x, yPos = root.y, width = 0, height = 0) {
@@ -26,15 +28,28 @@ StyledOverlayWidget {
         root.persistentStateEntry.height = 0
     }
 
-    onImageSourceChanged: {
+    function loadImage() {
         imageDownloader.running = false;
-        imageDownloader.sourceUrl = root.imageSource;
-        imageDownloader.filePath = Qt.resolvedUrl(Directories.tempImages + "/" + Qt.md5(root.imageSource))
-        imageDownloader.running = true;
+        imageWidth = 0;
+        imageHeight = 0;
+        animatedImage.source = "";
+
+        if (!validSource) return;
+        if (remoteSource) {
+            imageDownloader.sourceUrl = root.imageSource;
+            imageDownloader.filePath = Qt.resolvedUrl(Directories.tempImages + "/" + Qt.md5(root.imageSource));
+            imageDownloader.running = true;
+            return;
+        }
+
+        // Local files (including GIFs) are loaded directly by AnimatedImage.
+        animatedImage.source = Qt.resolvedUrl(FileUtils.trimFileProtocol(root.imageSource));
     }
-    onScaleFactorChanged: {
-        setSize();
-    }
+
+    onImageSourceChanged: loadImage()
+    onScaleFactorChanged: setSize()
+
+    Component.onCompleted: loadImage()
 
     function setSize() {
         bg.implicitWidth = root.imageWidth * root.scaleFactor;
@@ -49,10 +64,10 @@ StyledOverlayWidget {
         WheelHandler {
             onWheel: (event) => {
                 if (event.angleDelta.y < 0) {
-                    Config.options.overlay.floatingImage.scale = Math.max(0.1, Config.options.overlay.floatingImage.scale - 0.1);
+                    root.persistentStateEntry.scale = Math.max(0.1, root.scaleFactor - 0.1);
                 }
                 else if (event.angleDelta.y > 0) {
-                    Config.options.overlay.floatingImage.scale = Math.min(5.0, Config.options.overlay.floatingImage.scale + 0.1);
+                    root.persistentStateEntry.scale = Math.min(5.0, root.scaleFactor + 0.1);
                 }
             }
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -72,17 +87,22 @@ StyledOverlayWidget {
             anchors.centerIn: parent
             width: root.imageWidth * root.scaleFactor
             height: root.imageHeight * root.scaleFactor
-            sourceSize: {
-                const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
-                return Qt.size(width * dpr, height * dpr);
-            }
 
             playing: visible
             asynchronous: true
-            source: ""
+            cache: false
+
+            onStatusChanged: {
+                if (status === Image.Ready && root.imageWidth === 0) {
+                    root.imageWidth = implicitWidth;
+                    root.imageHeight = implicitHeight;
+                    root.setSize();
+                }
+            }
 
             ImageDownloaderProcess {
                 id: imageDownloader
+                running: false
                 filePath: Qt.resolvedUrl(Directories.tempImages + "/" + Qt.md5(root.imageSource))
                 sourceUrl: root.imageSource
 

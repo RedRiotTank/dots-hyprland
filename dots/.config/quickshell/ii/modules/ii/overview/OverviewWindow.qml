@@ -43,6 +43,7 @@ Item { // Window
     property var targetWindowHeight: windowData?.size[1] * scale * heightRatio
     property bool hovered: false
     property bool pressed: false
+    property bool selected: false
 
     property bool centerIcons: Config.options.overview.centerIcons
     property real iconGapRatio: 0.06
@@ -139,6 +140,20 @@ Item { // Window
             Behavior on height {
                 animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
             }
+        }
+
+        // Keyboard selection indicator.
+        Rectangle {
+            anchors.fill: parent
+            visible: root.selected
+            topLeftRadius: root.topLeftRadius
+            topRightRadius: root.topRightRadius
+            bottomRightRadius: root.bottomRightRadius
+            bottomLeftRadius: root.bottomLeftRadius
+            color: "transparent"
+            border.width: 3
+            border.color: Appearance.colors.colPrimary
+            z: 2
         }
     }
 }

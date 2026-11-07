@@ -101,6 +101,128 @@ Singleton {
                     property real width: 0
                     property real height: 0
                 }
+                // Fixed slots used by the multi-image overlay. Each slot keeps
+                // its own position, scale and image source.
+                property JsonObject floatingImage1: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 220
+                    property real y: 220
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage2: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 310
+                    property real y: 220
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage3: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 400
+                    property real y: 220
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage4: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 490
+                    property real y: 220
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage5: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 220
+                    property real y: 310
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage6: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 310
+                    property real y: 310
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage7: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 400
+                    property real y: 310
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage8: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 490
+                    property real y: 310
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage9: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 220
+                    property real y: 400
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage10: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 310
+                    property real y: 400
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage11: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 400
+                    property real y: 400
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
+                property JsonObject floatingImage12: JsonObject {
+                    property bool pinned: false
+                    property bool clickthrough: false
+                    property real x: 490
+                    property real y: 400
+                    property real width: 0
+                    property real height: 0
+                    property real scale: 0.5
+                    property string imageSource: ""
+                }
                 property JsonObject fpsLimiter: JsonObject {
                     property bool pinned: false
                     property bool clickthrough: false

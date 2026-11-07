@@ -359,11 +359,14 @@ ContentPage {
 
         MaterialTextArea {
             Layout.fillWidth: true
-            placeholderText: Translation.tr("Image source")
-            text: Config.options.overlay.floatingImage.imageSource
+            placeholderText: Translation.tr("One image/GIF path or URL per line")
+            text: (Config.options.overlay.floatingImage.sources ?? []).join("\n")
             wrapMode: TextEdit.Wrap
             onTextChanged: {
-                Config.options.overlay.floatingImage.imageSource = text;
+                Config.options.overlay.floatingImage.sources = text
+                    .split("\n")
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
             }
         }
     }
