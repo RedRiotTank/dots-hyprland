@@ -47,32 +47,6 @@ Rectangle {
                 }
             }
 
-            RippleButton {
-                id: pickImageButton
-                visible: OverlayContext.floatingImagesEnabled
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: implicitHeight
-                buttonRadius: root.radius - (root.height - height) / 2
-
-                onClicked: OverlayContext.pickFloatingImage()
-
-                contentItem: Item {
-                    anchors.centerIn: parent
-                    implicitWidth: 32
-                    implicitHeight: 32
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        iconSize: 24
-                        text: "add_photo_alternate"
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
-                }
-
-                StyledToolTip {
-                    text: "Add floating image from file"
-                }
-            }
         }
 
         Separator {}

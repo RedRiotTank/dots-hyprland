@@ -10,7 +10,7 @@ Singleton {
     signal requestCenter(string identifier)
 
     readonly property int maxFloatingImages: 12
-    property int floatingImageSpawnCounter: 0
+    property string pickerTargetIdentifier: ""
 
     readonly property bool floatingImagesEnabled: Config.options.policies.weeb !== 0
 
@@ -49,12 +49,8 @@ Singleton {
         };
     }
 
-    function floatingImageSourceFor(index: int): string {
-        const options = Config.options.overlay.floatingImage.sources ?? [];
-        const sources = options.length > 0
-            ? options
-            : [Config.options.overlay.floatingImage.imageSource];
-        return sources[index % sources.length] ?? "";
+    function defaultFloatingImageSource(): string {
+        return Config.options.overlay.floatingImage.imageSource ?? "";
     }
 
     function spawnFloatingImage(source = ""): string {
@@ -67,10 +63,7 @@ Singleton {
             const state = Persistent.states.overlay[identifier];
             if (!state) continue;
 
-            state.imageSource = source.length > 0
-                ? source
-                : root.floatingImageSourceFor(root.floatingImageSpawnCounter);
-            root.floatingImageSpawnCounter += 1;
+            state.imageSource = source.length > 0 ? source : root.defaultFloatingImageSource();
             state.pinned = false;
             state.clickthrough = false;
 
@@ -80,8 +73,11 @@ Singleton {
         return "";
     }
 
-    function pickFloatingImage(): void {
+    function requestFloatingImageSource(identifier: string): void {
         if (!root.floatingImagesEnabled) return;
+        const state = Persistent.states.overlay[identifier];
+        if (!state) return;
+        root.pickerTargetIdentifier = identifier;
         pickImageProcess.running = true;
     }
 
@@ -100,7 +96,12 @@ Singleton {
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
-                if (path.length > 0) root.spawnFloatingImage(path);
+                const identifier = root.pickerTargetIdentifier;
+                if (path.length > 0 && identifier.length > 0) {
+                    const state = Persistent.states.overlay[identifier];
+                    if (state) state.imageSource = path;
+                }
+                root.pickerTargetIdentifier = "";
             }
         }
     }
