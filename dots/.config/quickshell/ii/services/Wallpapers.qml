@@ -19,7 +19,8 @@ Singleton {
     property string generateThumbnailsMagickScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/generate-thumbnails-magick.sh`
     property alias directory: folderModel.folder
     readonly property string effectiveDirectory: FileUtils.trimFileProtocol(folderModel.folder.toString())
-    property url defaultFolder: Qt.resolvedUrl(`${Directories.pictures}/Wallpapers`)
+    // Keep the built-in wallpaper selector in the same folder as waypaper.
+    property url defaultFolder: Qt.resolvedUrl(`${Directories.pictures}/Wallpapers/${Config.options.policies.weeb !== 0 ? "weeb" : "sober"}`)
     property alias folderModel: folderModel // Expose for direct binding when needed
     property string searchQuery: ""
     readonly property list<string> extensions: [ // TODO: add videos
