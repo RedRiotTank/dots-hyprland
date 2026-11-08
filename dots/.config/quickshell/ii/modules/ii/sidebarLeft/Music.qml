@@ -230,7 +230,7 @@ Item {
         const artist = String(track.artist?.name ?? "");
         recommendationLauncher.command = [
             "python3", root.recommendationLauncherPath,
-            root.playbackPlatform, title, artist
+            root.playbackPlatform, title, artist, String(track.isrc ?? "")
         ];
         recommendationLauncher.running = false;
         recommendationLauncher.running = true;
