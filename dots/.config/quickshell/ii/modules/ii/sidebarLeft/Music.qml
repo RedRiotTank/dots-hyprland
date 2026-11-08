@@ -22,6 +22,11 @@ Item {
     property bool usingSynced: false
     property int activeLine: -1
     property real currentPosition: 0
+    property string loadedTrackKey: ""
+    readonly property real lyricsRowHeight: 32
+
+    readonly property bool pageActive: SwipeView.isCurrentItem ?? true
+    readonly property string currentTrackKey: `${root.trackArtist}|${root.trackTitle}`
 
     readonly property string helperPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/lyrics/lrclib.py`
     readonly property string recommendationLauncherPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/media/recommendation_launcher.py`
@@ -44,10 +49,9 @@ Item {
         const identity = String(player?.identity ?? "").toLowerCase();
         const desktopEntry = String(player?.desktopEntry ?? "").toLowerCase();
         const dbusName = String(player?.dbusName ?? "").toLowerCase();
-        const metadataUrl = String((player?.metadata ?? {})["xesam:url"] ?? "").toLowerCase();
-        const description = `${identity} ${desktopEntry} ${dbusName} ${metadataUrl}`;
+        const description = `${identity} ${desktopEntry} ${dbusName}`;
         if (description.includes("spotify")) return "spotify";
-        if (description.includes("music.youtube") || description.includes("youtube music")) return "youtube-music";
+        if (description.includes("youtube music") || description.includes("ytmusic")) return "youtube-music";
         return "youtube";
     }
 
@@ -97,6 +101,18 @@ Item {
         if (index !== root.activeLine)
             root.activeLine = index;
     }
+
+    function scrollLyrics() {
+        if (!root.hasLyrics) return;
+        const maxY = Math.max(0, lyricsList.contentHeight - lyricsList.height);
+        const target = Math.max(0, Math.min(maxY,
+            (root.displayLine + 0.5) * root.lyricsRowHeight - lyricsList.height / 2));
+        lyricScrollAnimation.to = target;
+        lyricScrollAnimation.restart();
+    }
+
+    onDisplayLineChanged: scrollLyrics()
+    onLinesChanged: Qt.callLater(scrollLyrics)
 
     function startArtDownload(url, key) {
         const path = StringUtils.shellSingleQuoteEscape(`${Directories.coverArt}/${key}`);
@@ -161,6 +177,34 @@ Item {
         root.updateActiveLine();
     }
 
+    function startTrackContent() {
+        if (!root.pageActive || root.trackTitle.length === 0) return;
+        const key = root.currentTrackKey;
+        if (root.loadedTrackKey === key)
+            return;
+
+        root.loadedTrackKey = key;
+        root.status = "loading";
+        root.errorText = "";
+        root.lines = [];
+        root.activeLine = -1;
+        root.syncPosition();
+        root.loadRecommendations();
+
+        const player = MprisController.activePlayer;
+        const duration = String(player?.length ?? 0);
+
+        lyricsProcess.running = false;
+        lyricsProcess.command = [
+            "python3", root.helperPath,
+            root.trackArtist ?? "",
+            root.trackTitle ?? "",
+            root.trackAlbum ?? "",
+            duration,
+        ];
+        lyricsProcess.running = true;
+    }
+
     function loadRecommendations() {
         root.recommendationsError = "";
         const artist = root.trackArtist.trim();
@@ -202,33 +246,36 @@ Item {
             root.status = "idle";
             root.lines = [];
             root.activeLine = -1;
+            root.loadedTrackKey = "";
             root.recommendations = [];
             root.recommendationsLoading = false;
+            lyricsProcess.running = false;
+            recsProcess.running = false;
             return;
         }
 
         root.trackTitle = track.title;
         root.trackArtist = track.artist;
         root.trackAlbum = track.album;
-        root.status = "loading";
-        root.errorText = "";
-        root.lines = [];
-        root.activeLine = -1;
         root.syncPosition();
-        root.loadRecommendations();
 
-        const player = MprisController.activePlayer;
-        const duration = String(player?.length ?? 0);
+        // Loading lyrics, recommendations and the cava visualizer is deferred
+        // until the Music page is actually visible. This keeps fast track
+        // skipping from creating hundreds of temporary JS objects and processes.
+        if (root.pageActive)
+            contentDelay.restart();
+    }
 
-        lyricsProcess.running = false;
-        lyricsProcess.command = [
-            "python3", root.helperPath,
-            track.artist ?? "",
-            track.title ?? "",
-            track.album ?? "",
-            duration,
-        ];
-        lyricsProcess.running = true;
+    onPageActiveChanged: {
+        if (root.pageActive) {
+            contentDelay.stop();
+            root.startTrackContent();
+            root.updateArt();
+        } else {
+            contentDelay.stop();
+            lyricsProcess.running = false;
+            recsProcess.running = false;
+        }
     }
 
     function applyLyrics(data) {
@@ -358,15 +405,30 @@ Item {
         onTriggered: root.ensureArtCurrent()
     }
 
+    Timer {
+        id: contentDelay
+        interval: 250
+        repeat: false
+        onTriggered: root.startTrackContent()
+    }
+
+    NumberAnimation {
+        id: lyricScrollAnimation
+        target: lyricsList
+        property: "contentY"
+        duration: 420
+        easing.type: Easing.OutCubic
+    }
+
     // cava visualizer
     Process {
         id: cavaProc
-        running: MprisController.isPlaying && GlobalStates.sidebarLeftOpen
+        running: MprisController.isPlaying && GlobalStates.sidebarLeftOpen && root.pageActive
         onRunningChanged: {
             if (!cavaProc.running)
                 root.visualizerPoints = [];
         }
-        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/raw_output_config.txt`]
+        command: ["cava", "-p", `${FileUtils.trimFileProtocol(Directories.scriptPath)}/cava/music_output_config.txt`]
         stdout: SplitParser {
             onRead: data => {
                 root.visualizerPoints = data.split(";")
@@ -487,7 +549,7 @@ Item {
             }
         }
 
-        // Lyrics: vertically scrolling, Spotify-style
+        // Lyrics: virtualised vertical scroll, Spotify-style
         Rectangle {
             id: lyricsBox
             Layout.fillWidth: true
@@ -496,77 +558,59 @@ Item {
             color: Appearance.colors.colLayer1
             clip: true
 
-            readonly property real rowHeight: 32
-
-            Item {
-                id: lyricsViewport
+            ListView {
+                id: lyricsList
                 anchors.fill: parent
                 clip: true
+                interactive: false
+                model: root.lines
+                spacing: 0
 
-                Item {
-                    id: lyricsTrack
-                    width: parent.width
-                    height: Math.max(1, root.lines.length * lyricsBox.rowHeight)
-                    y: lyricsViewport.height / 2 - (root.displayLine + 0.5) * lyricsBox.rowHeight
+                delegate: Item {
+                    id: lyricRow
+                    required property var modelData
+                    required property int index
 
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: 420
-                            easing.type: Easing.OutCubic
+                    width: lyricsList.width
+                    height: root.lyricsRowHeight
+
+                    StyledText {
+                        anchors {
+                            fill: parent
+                            leftMargin: 14
+                            rightMargin: 14
                         }
-                    }
-
-                    Repeater {
-                        model: root.lines
-
-                        delegate: Item {
-                            id: lyricRow
-                            required property var modelData
-                            required property int index
-
-                            width: lyricsTrack.width
-                            height: lyricsBox.rowHeight
-                            y: index * lyricsBox.rowHeight
-
-                            StyledText {
-                                anchors {
-                                    fill: parent
-                                    leftMargin: 14
-                                    rightMargin: 14
-                                }
-                                text: lyricRow.modelData.text
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
-                                color: lyricRow.index === root.displayLine
-                                    ? Appearance.colors.colPrimary
-                                    : ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.5)
-                                opacity: lyricRow.index === root.displayLine ? 1 : 0.7
-                                font {
-                                    weight: lyricRow.index === root.displayLine ? Font.DemiBold : Font.Normal
-                                    pixelSize: lyricRow.index === root.displayLine
-                                        ? Appearance.font.pixelSize.larger
-                                        : Appearance.font.pixelSize.small
-                                }
-                            }
+                        text: lyricRow.modelData.text
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        color: lyricRow.index === root.displayLine
+                            ? Appearance.colors.colPrimary
+                            : ColorUtils.transparentize(Appearance.colors.colOnSurface, 0.5)
+                        opacity: lyricRow.index === root.displayLine ? 1 : 0.7
+                        font {
+                            weight: lyricRow.index === root.displayLine ? Font.DemiBold : Font.Normal
+                            pixelSize: lyricRow.index === root.displayLine
+                                ? Appearance.font.pixelSize.larger
+                                : Appearance.font.pixelSize.small
                         }
                     }
                 }
+            }
 
-                StyledText {
-                    anchors.centerIn: parent
-                    width: parent.width - 24
-                    visible: !root.hasLyrics
-                    text: {
-                        if (root.status === "loading") return Translation.tr("Loading lyrics...");
-                        if (root.status === "error" && root.errorText.length > 0) return root.errorText;
-                        return Translation.tr("No lyrics found");
-                    }
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    wrapMode: Text.Wrap
+            StyledText {
+                anchors.centerIn: parent
+                width: parent.width - 24
+                visible: !root.hasLyrics
+                text: {
+                    if (root.status === "loading") return Translation.tr("Loading lyrics...");
+                    if (root.status === "error" && root.errorText.length > 0) return root.errorText;
+                    return Translation.tr("No lyrics found");
                 }
+                horizontalAlignment: Text.AlignHCenter
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.small
+                wrapMode: Text.Wrap
             }
         }
 
