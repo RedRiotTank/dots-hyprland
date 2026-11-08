@@ -399,7 +399,8 @@ a recommended track to its exact Spotify URI:
 
 Playback then goes through MPRIS. Before opening the track, the launcher enables a temporary
 `no_focus` window rule for Spotify and disables it immediately afterwards. Spotify changes the
-song without raising its window, focusing it, or switching workspaces.
+song without raising its window, focusing it, or switching workspaces. Cursor warps are disabled
+only for that moment, so the pointer stays where it was.
 
 No OAuth authorization is required for this path. If you also want to experiment with Spotify
 Web API Remote Play, authorize the app once and opt in explicitly:
