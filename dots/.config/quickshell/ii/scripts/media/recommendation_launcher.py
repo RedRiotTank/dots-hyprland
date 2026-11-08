@@ -23,6 +23,10 @@ USER_AGENT = (
 LOG_FILE = Path.home() / ".cache" / "quickshell" / "recommendation_launcher.log"
 TOKEN_FILE = Path.home() / ".config" / "illogical-impulse" / "spotify_token.json"
 PLAYBACK_STATE_FILE = Path.home() / ".cache" / "quickshell" / "spotify_playback_state.json"
+BROWSER_CLASS_REGEX = (
+    "^(zen|firefox|librewolf|google-chrome|chrome|chromium|brave|brave-browser|"
+    "microsoft-edge|microsoft-edge-stable|opera|vivaldi|vivaldi-stable)$"
+)
 ENV_FILES = [
     Path.home() / ".config" / "uwsm" / "env",
     Path.home() / ".config" / "uwsm" / "env.local",
@@ -123,6 +127,58 @@ def restore_focus_if_stolen(state: dict) -> None:
             restore_focus_state(state)
             return
         time.sleep(0.025)
+
+
+def set_browser_no_focus(enabled: bool) -> bool:
+    """Temporarily stop the browser from raising itself for a new tab."""
+    if enabled:
+        code = (
+            'if not _recommendation_browser_no_focus then '
+            '_recommendation_browser_no_focus = hl.window_rule({'
+            'name="recommendation-browser-no-focus", '
+            f'match={{class="{BROWSER_CLASS_REGEX}"}}, no_focus=true}}) '
+            'else _recommendation_browser_no_focus:set_enabled(true) end'
+        )
+    else:
+        code = (
+            'if _recommendation_browser_no_focus then '
+            '_recommendation_browser_no_focus:set_enabled(false) end'
+        )
+    try:
+        result = subprocess.run(
+            ["hyprctl", "eval", code],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=4,
+        )
+        return result.returncode == 0
+    except Exception as error:
+        log(f"browser no-focus rule failed: {type(error).__name__}: {error}")
+        return False
+
+
+def open_browser_url(url: str) -> None:
+    """Open a browser URL without switching focus or warping the pointer."""
+    focus_state = capture_focus_state()
+    previous_no_warps = get_cursor_no_warps()
+    if not previous_no_warps:
+        set_cursor_no_warps(True)
+    no_focus_rule = set_browser_no_focus(True)
+    try:
+        open_url(url)
+        time.sleep(0.15)
+        active = hyprctl_json(["activewindow", "-j"])
+        active_class = str(active.get("class", "")).lower()
+        original_class = str(focus_state.get("class", "")).lower()
+        if re.fullmatch(BROWSER_CLASS_REGEX, active_class) and not re.fullmatch(
+            BROWSER_CLASS_REGEX, original_class
+        ):
+            restore_focus_state(focus_state)
+    finally:
+        if no_focus_rule:
+            set_browser_no_focus(False)
+        if not previous_no_warps:
+            set_cursor_no_warps(False)
 
 
 def set_spotify_no_focus(enabled: bool) -> bool:
@@ -549,13 +605,13 @@ def main() -> None:
 
     if video_id:
         host = "music.youtube.com" if platform == "youtube-music" else "www.youtube.com"
-        open_url(f"https://{host}/watch?v={video_id}")
+        open_browser_url(f"https://{host}/watch?v={video_id}")
         return
 
     if platform == "youtube-music":
-        open_url("https://music.youtube.com/search?q=" + urllib.parse.quote_plus(query))
+        open_browser_url("https://music.youtube.com/search?q=" + urllib.parse.quote_plus(query))
     else:
-        open_url("https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query))
+        open_browser_url("https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query))
 
 
 if __name__ == "__main__":

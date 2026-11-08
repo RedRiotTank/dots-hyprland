@@ -100,6 +100,8 @@ with a complete playback-focused view:
 
 - album art with title and artist;
 - synced lyrics that scroll vertically, Spotify-style, with the current line highlighted;
+- YouTube titles are normalized (`Official Video`, `Videoclip oficial`, `Lyric Video`, etc.) before
+  the lyrics lookup, so browser playback works with the same LRCLIB source as Spotify;
 - elapsed time, remaining time, and a seekable progress bar;
 - previous / play-pause / next controls;
 - a cava visualizer flush with the bottom edge of the panel;
@@ -109,7 +111,7 @@ Recommendations open on the platform that is currently playing:
 
 | Active platform | Behavior |
 | --- | --- |
-| YouTube / YouTube Music | Resolves the first matching video and opens it directly. |
+| YouTube / YouTube Music | Resolves the first matching video and opens it without stealing focus. Firefox/Zen can reuse the current tab after the one-time preference described below; otherwise the browser opens a new tab. |
 | Spotify | Resolves the exact track and starts it through MPRIS. A temporary Hyprland `no_focus` rule keeps Spotify from raising its window, so focus and workspace do not move. Spotify API credentials are required for exact matching. |
 | Unknown player | Falls back to a YouTube search. |
 
@@ -424,6 +426,23 @@ MPRIS path is more reliable and already avoids focus changes; if Remote Play fai
 automatically falls back to it. YouTube and YouTube Music recommendations still resolve and open
 the matching video directly.
 
+### YouTube recommendations and the current tab
+
+Firefox and Zen open external URLs in a new tab by default. To make a YouTube recommendation
+replace the tab that is already playing, set this preference in `about:config`:
+
+```text
+browser.link.open_newwindow.override.external = 1
+```
+
+Value `1` means "current window/tab"; the recommendation launcher then navigates the existing
+tab. This preference applies to external links from all applications, but it is easy to revert.
+The launcher still uses a temporary `no_focus` rule and disables cursor warps, so the browser
+does not take focus or move the pointer.
+
+Without that preference, Firefox/Zen keeps its default behavior and opens the recommendation in
+a new tab. Chromium-based browsers do not expose an equivalent preference.
+
 ### Waypaper
 
 `Super + Alt + W` uses `waypaper` to browse the active profile's folder. This is optional;
@@ -476,6 +495,13 @@ playerctl metadata --format '{{playerName}} {{title}}'
 Exact Spotify matching requires the credentials described above. Without them, Spotify
 recommendations open a search page instead of a specific track. YouTube and YouTube Music open
 directly.
+
+### Lyrics are missing for a YouTube video
+
+YouTube MPRIS metadata often contains decorations such as `(Official Video)`, `(Videoclip
+oficial)`, `[Lyric Video]` or the channel name instead of the artist. The lyrics helper strips
+those decorations, splits `Artist - Song` titles and retries LRCLIB with the cleaned values. If
+the video is an interview, a talk or a cover that is not listed on LRCLIB, no lyrics can be shown.
 
 ### I want the upstream experience
 
