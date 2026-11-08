@@ -12,7 +12,8 @@ RippleButton {
     property bool aiChatEnabled: Config.options.policies.ai !== 0
     property bool translatorEnabled: Config.options.sidebar.translator.enable
     property bool animeEnabled: Config.options.policies.weeb !== 0
-    visible: aiChatEnabled || translatorEnabled || animeEnabled
+    // The sidebar is always reachable; profile tabs decide what it contains.
+    visible: true
 
     property real buttonPadding: 5
     implicitWidth: distroIcon.width + buttonPadding * 2

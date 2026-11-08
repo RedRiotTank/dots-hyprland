@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Qt.labs.synchronizer
+import Quickshell
 
 Item {
     id: root
@@ -35,7 +36,7 @@ Item {
             icon: "bookmark_heart",
             name: Translation.tr("Anime"),
             component: anime,
-            available: Config.options.policies.weeb !== 0 && Config.options.policies.weeb !== 2,
+            available: true,
         },
         {
             key: "social",
@@ -74,14 +75,11 @@ Item {
     ]
 
     function tabVisible(key) {
-        const state = Persistent.states.sidebar.leftPanel;
-        if (!state) return true;
-        return state[key] !== false;
+        return ProfileManager.tabVisible(key);
     }
 
     function setTabVisible(key, value) {
-        const state = Persistent.states.sidebar.leftPanel;
-        if (state) state[key] = value;
+        ProfileManager.setTabVisible(key, value);
     }
 
     function focusActiveItem() {
@@ -348,6 +346,39 @@ Item {
 
                     Item {
                         Layout.fillHeight: true
+                    }
+
+                    RippleButton {
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: Appearance.colors.colLayer2
+                        onClicked: Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "modeSelector", "toggle"])
+
+                        contentItem: RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 8
+
+                            MaterialSymbol {
+                                text: "palette"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colOnSurface
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr("Desktop modes")
+                                color: Appearance.colors.colOnSurface
+                                font.pixelSize: Appearance.font.pixelSize.small
+                            }
+
+                            MaterialSymbol {
+                                text: "chevron_right"
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
                     }
 
                     StyledText {

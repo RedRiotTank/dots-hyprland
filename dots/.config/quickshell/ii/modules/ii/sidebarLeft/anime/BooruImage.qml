@@ -26,6 +26,7 @@ Button {
     property real imageRadius: Appearance.rounding.small
 
     property bool showActions: false
+    property bool wallpaperBusy: false
 
     readonly property var focusedMonitor: HyprlandData.monitors.find(monitor => monitor.focused) ?? HyprlandData.monitors[0]
     readonly property int screenWidth: root.focusedMonitor?.width ?? 1920
@@ -64,6 +65,10 @@ Button {
     }
 
     function applyWallpaper() {
+        root.wallpaperBusy = true;
+        wallpaperBusyTimer.restart();
+        profileReloadTimer.restart();
+
         const userAgent = Config.options?.networking?.userAgent ?? "";
         const userAgentHeader = userAgent
             ? ` -H 'User-Agent: ${StringUtils.shellSingleQuoteEscape(userAgent)}'`
@@ -80,6 +85,18 @@ Button {
 
         Quickshell.execDetached(["notify-send", "-a", "Anime wallpaper", "Downloading wallpaper", "Preparing the image..."]);
         Quickshell.execDetached(["bash", "-c", command]);
+    }
+
+    Timer {
+        id: wallpaperBusyTimer
+        interval: 25000
+        onTriggered: root.wallpaperBusy = false
+    }
+
+    Timer {
+        id: profileReloadTimer
+        interval: 7000
+        onTriggered: ProfileManager.reload()
     }
 
     ImageDownloaderProcess {
@@ -107,7 +124,7 @@ Button {
 
     Popup {
         id: lowResDialog
-        parent: Overlay.overlay
+        parent: Overlay.overlay ? Overlay.overlay : root
         width: 400
         height: lowResColumn.implicitHeight + 32
         x: Math.round((parent.width - width) / 2)
@@ -234,6 +251,34 @@ Button {
                     width: root.rowHeight * modelData.aspect_ratio
                     height: root.rowHeight
                     radius: imageRadius
+                }
+            }
+        }
+
+        Rectangle {
+            visible: root.wallpaperBusy
+            anchors.centerIn: parent
+            z: 10
+            width: 190
+            height: 42
+            radius: Appearance.rounding.small
+            color: ColorUtils.transparentize(Appearance.m3colors.m3surfaceContainer, 0.1)
+            border.width: 1
+            border.color: Appearance.colors.colOutlineVariant
+
+            RowLayout {
+                anchors.centerIn: parent
+                spacing: 8
+
+                MaterialSymbol {
+                    text: "downloading"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnSurface
+                }
+                StyledText {
+                    text: "Setting wallpaper..."
+                    color: Appearance.colors.colOnSurface
+                    font.pixelSize: Appearance.font.pixelSize.small
                 }
             }
         }

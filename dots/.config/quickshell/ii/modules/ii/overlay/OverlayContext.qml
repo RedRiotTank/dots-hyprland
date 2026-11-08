@@ -12,7 +12,7 @@ Singleton {
     readonly property int maxFloatingImages: 12
     property string pickerTargetIdentifier: ""
 
-    readonly property bool floatingImagesEnabled: Config.options.policies.weeb !== 0
+    readonly property bool floatingImagesEnabled: Config.options.policies.floatingImages ?? true
 
     readonly property list<var> availableWidgets: [
         { identifier: "crosshair", materialSymbol: "point_scan" },

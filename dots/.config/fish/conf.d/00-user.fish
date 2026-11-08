@@ -3,17 +3,23 @@
 
 if status is-interactive
 
-    # Terminal greeting: pokemon in weeb mode, CachyOS logo otherwise.
-    function __ii_mode
-        if test -f ~/.local/state/illogical-impulse/mode
-            cat ~/.local/state/illogical-impulse/mode
+    # Terminal greeting depends on the active desktop profile.
+    function __ii_terminal_style
+        if test -f ~/.local/state/illogical-impulse/terminal
+            cat ~/.local/state/illogical-impulse/terminal
+        else if test -f ~/.local/state/illogical-impulse/mode
+            if test (cat ~/.local/state/illogical-impulse/mode) = weeb
+                echo pokemon
+            else
+                echo cachyos
+            end
         else
-            echo weeb
+            echo pokemon
         end
     end
 
     function fastfetch
-        if test (__ii_mode) = weeb
+        if test (__ii_terminal_style) = pokemon
             pokemon-colorscripts -r --no-title -s | command fastfetch --raw - --logo-width 40 --logo-padding-right 2 $argv
         else
             command fastfetch --logo CachyOS $argv

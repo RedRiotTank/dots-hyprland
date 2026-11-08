@@ -74,8 +74,8 @@ hl.bind("SUPER + Left", hl.dsp.exec_cmd("hyprctl --batch 'dispatch focusmonitor 
 -- ====================================================================
 -- 7. WEEB / SOBER MODES AND WALLPAPERS
 -- ====================================================================
--- Toggle between the weeb and sober profiles.
-hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd("$HOME/.config/hypr/custom/scripts/mode-toggle.sh"), { description = "Theme: Toggle weeb/sober mode" })
+-- Open the desktop profile selector.
+hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd(qsIpcCall .. " modeSelector toggle"), { description = "Desktop: Choose profile" })
 
 -- Open waypaper using the wallpaper folder of the current mode.
 hl.bind("SUPER + ALT + W", hl.dsp.exec_cmd("$HOME/.config/hypr/custom/scripts/waypaper-mode.sh"), { description = "Wallpaper: Open waypaper for current mode" })
