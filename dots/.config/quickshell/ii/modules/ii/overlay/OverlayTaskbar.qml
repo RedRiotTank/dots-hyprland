@@ -13,6 +13,7 @@ Rectangle {
     id: root
 
     property real padding: 8
+    property string screenName: ""
 
     opacity: GlobalStates.overlayOpen ? 1 : 0
     implicitWidth: contentRow.implicitWidth + (padding * 2)
@@ -133,12 +134,15 @@ Rectangle {
         }
         onClicked: {
             if (floatingImageSpawner) {
-                OverlayContext.spawnFloatingImage();
+                OverlayContext.spawnFloatingImage("", root.screenName);
                 return;
             }
             if (widgetButton.toggled) {
                 Persistent.states.overlay.open = Persistent.states.overlay.open.filter(type => type !== identifier);
             } else {
+                const state = Persistent.states.overlay[identifier];
+                if (state && root.screenName.length > 0)
+                    state.screenName = root.screenName;
                 Persistent.states.overlay.open.push(identifier);
             }
         }

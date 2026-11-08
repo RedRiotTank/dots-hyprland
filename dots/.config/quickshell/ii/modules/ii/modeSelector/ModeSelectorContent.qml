@@ -12,6 +12,14 @@ Item {
     id: root
     signal closeRequested()
 
+    focus: true
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Escape) {
+            root.closeRequested();
+            event.accepted = true;
+        }
+    }
+
     property string selectedId: ""
     property var draft: null
     property bool dirty: false
@@ -244,7 +252,12 @@ Item {
                     }
                 }
 
+                Item {
+                    Layout.fillWidth: true
+                }
+
                 IconToolbarButton {
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     implicitHeight: 36
                     text: "close"
                     onClicked: root.closeRequested()
@@ -457,6 +470,26 @@ Item {
                     }
 
                     StyledText {
+                        text: Translation.tr("Wallpaper rotation (0 disables it)")
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                    }
+                    ConfigSpinBox {
+                        Layout.fillWidth: true
+                        icon: "timer"
+                        text: Translation.tr("Change wallpaper every N seconds")
+                        value: root.draft?.wallpaperInterval ?? 0
+                        from: 0
+                        to: 86400
+                        stepSize: 30
+                        onValueChanged: {
+                            if (!root.draft) return;
+                            if (value === (root.draft.wallpaperInterval ?? 0)) return;
+                            root.updateDraft({ wallpaperInterval: value });
+                        }
+                    }
+
+                    StyledText {
                         text: Translation.tr("Desktop style")
                         color: Appearance.colors.colSubtext
                         font.pixelSize: Appearance.font.pixelSize.smaller
@@ -476,6 +509,12 @@ Item {
                             iconName: "imagesmode"
                             value: root.draft?.floatingImages === true
                             onClicked: root.updateDraft({ floatingImages: !(root.draft?.floatingImages === true) })
+                        }
+                        ToggleChip {
+                            label: Translation.tr("Colored icons")
+                            iconName: "palette"
+                            value: root.draft?.coloredIcons === true
+                            onClicked: root.updateDraft({ coloredIcons: !(root.draft?.coloredIcons === true) })
                         }
                         ToggleChip {
                             label: "Pokemon"
@@ -525,8 +564,8 @@ Item {
                             onClicked: root.setDraftTab("social", !root.draftTab("social"))
                         }
                         ToggleChip {
-                            label: Translation.tr("Lyrics")
-                            iconName: "lyrics"
+                            label: Translation.tr("Music")
+                            iconName: "music_note"
                             value: root.draftTab("lyrics")
                             onClicked: root.setDraftTab("lyrics", !root.draftTab("lyrics"))
                         }

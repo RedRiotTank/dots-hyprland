@@ -49,6 +49,19 @@ Singleton {
         root.profileList = list;
     }
 
+    // Mirror the applied profile into the live Config singleton. External
+    // scripts write config.json atomically, which the running FileView does
+    // not always notice, so this keeps the current session in sync too.
+    function syncProfileToConfig(profile) {
+        if (!profile) return;
+        if (profile.wallpaper) {
+            Config.options.background.wallpaperPath = profile.wallpaper;
+            Config.options.background.thumbnailPath = profile.wallpaper;
+        }
+        Config.options.policies.weeb = profile.weebPolicy ? 1 : 0;
+        Config.options.policies.floatingImages = profile.floatingImages === true;
+    }
+
     function setTabVisible(key, value) {
         const profile = root.activeProfile;
         if (!profile) return;
@@ -70,9 +83,41 @@ Singleton {
             root.pendingAction = { args: args, callback: callback };
             return;
         }
+        // The Python helper rewrites config.json. Make sure any pending QML
+        // changes (weather city, wallpaper, policies...) are already on disk
+        // so they are not lost when the helper loads and saves the file.
+        Config.flush();
         actionProcess.command = ["python3", root.helperPath].concat(args);
         actionProcess.currentCallback = callback;
         actionProcess.running = true;
+    }
+
+    function rotateWallpaper() {
+        const profile = root.activeProfile;
+        if (!profile) return;
+        root.runAction(["rotate-wallpaper", profile.id], (text, exitCode) => {
+            if (exitCode !== 0) return;
+            try {
+                const updated = JSON.parse(text);
+                if (updated && !updated.error) {
+                    root.replaceLocalProfile(updated);
+                    root.syncProfileToConfig(updated);
+                }
+            } catch (error) {
+                // Ignore malformed output, the next reload will resync.
+            }
+        });
+    }
+
+    readonly property int wallpaperInterval: root.activeProfile?.wallpaperInterval ?? 0
+
+    Timer {
+        id: wallpaperRotationTimer
+        // 0 (or a missing value) disables rotation.
+        running: root.wallpaperInterval > 0 && root.activeProfile !== null
+        repeat: true
+        interval: Math.max(5, root.wallpaperInterval) * 1000
+        onTriggered: root.rotateWallpaper()
     }
 
     function applyProfile(profileId, callback) {
@@ -81,6 +126,7 @@ Singleton {
                 try {
                     const parsed = JSON.parse(text);
                     root.activeId = parsed.id ?? profileId;
+                    root.syncProfileToConfig(parsed);
                 } catch (error) {
                     root.activeId = profileId;
                 }
@@ -110,6 +156,10 @@ Singleton {
         root.runAction(["delete", profileId], (text, exitCode) => {
             let remaining = null;
             try { remaining = JSON.parse(text); } catch (error) { remaining = null; }
+            if (remaining && !remaining.error) {
+                root.activeId = remaining.id;
+                root.syncProfileToConfig(remaining);
+            }
             if (callback) callback(remaining, exitCode);
         });
     }
@@ -118,7 +168,10 @@ Singleton {
         root.runAction(["set-wallpaper", imagePath], (text, exitCode) => {
             let updated = null;
             try { updated = JSON.parse(text); } catch (error) { updated = null; }
-            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (updated && !updated.error) {
+                root.replaceLocalProfile(updated);
+                root.syncProfileToConfig(updated);
+            }
             if (callback) callback(updated, exitCode);
         });
     }

@@ -49,6 +49,12 @@ Scope {
             }
         }
 
+        Shortcut {
+            sequence: "Escape"
+            context: Qt.WindowShortcut
+            onActivated: root.open = false
+        }
+
         ModeSelectorContent {
             id: content
             anchors.fill: parent

@@ -18,11 +18,20 @@ Singleton {
     readonly property bool useUSCS: Config.options.bar.weather.useUSCS
     property bool gpsActive: Config.options.bar.weather.enableGPS
 
-    onUseUSCSChanged: {
-        root.getData();
+    onUseUSCSChanged: root.scheduleRefresh()
+    onCityChanged: root.scheduleRefresh()
+    onLatitudeChanged: root.scheduleRefresh()
+    onLongitudeChanged: root.scheduleRefresh()
+
+    function scheduleRefresh() {
+        refreshDebounce.restart();
     }
-    onCityChanged: {
-        root.getData();
+
+    Timer {
+        id: refreshDebounce
+        interval: 250
+        repeat: false
+        onTriggered: root.getData()
     }
 
     property var location: ({
@@ -47,6 +56,7 @@ Singleton {
         tempFeelsLike: 0,
         lastRefresh: 0,
     })
+    property int fetchFailures: 0
 
     function refineData(data) {
         let temp = {};
@@ -80,10 +90,11 @@ Singleton {
         }
         temp.lastRefresh = DateTime.time + " • " + DateTime.date;
         root.data = temp;
+        root.fetchFailures = 0;
     }
 
     function getData() {
-        let command = "curl -s wttr.in";
+        let command = "curl -sS --max-time 20 wttr.in";
 
         if (root.gpsActive && root.location.valid) {
             command += `/${root.location.lat},${root.location.long}`;
@@ -128,6 +139,25 @@ Singleton {
                 }
             }
         }
+        onExited: (exitCode, exitStatus) => {
+            // The first request often races with the network coming up after
+            // a reboot. Retry with a short backoff instead of waiting the full
+            // fetch interval.
+            if (exitCode !== 0 || root.data.lastRefresh === 0) {
+                root.fetchFailures += 1;
+                if (root.fetchFailures <= 6)
+                    retryTimer.restart();
+            } else {
+                root.fetchFailures = 0;
+            }
+        }
+    }
+
+    Timer {
+        id: retryTimer
+        interval: Math.min(60000, 5000 * Math.max(1, root.fetchFailures))
+        repeat: false
+        onTriggered: root.getData()
     }
 
     PositionSource {

@@ -97,7 +97,7 @@ Item {
             }
             MaterialSymbol {
                 visible: root.profile?.tabs?.lyrics !== false
-                text: "lyrics"
+                text: "music_note"
                 iconSize: root.compact ? 11 : 16
                 color: "white"
             }

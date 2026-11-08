@@ -27,9 +27,11 @@ STATES_FILE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) 
 WAYPAPER_CONFIG = HOME / ".config" / "waypaper" / "config.ini"
 SWITCHWALL = HOME / ".config" / "quickshell" / "ii" / "scripts" / "colors" / "switchwall.sh"
 DEFAULT_WALLPAPER_DIR = HOME / "Pictures" / "Wallpapers"
+FALLBACK_WALLPAPER = HOME / ".config" / "quickshell" / "ii" / "assets" / "images" / "default_wallpaper.png"
 
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp", ".gif"}
 
 
 def load_json(path: Path, fallback):
@@ -46,6 +48,33 @@ def save_json(path: Path, data) -> None:
         json.dump(data, handle, ensure_ascii=False, indent=2)
         temporary = handle.name
     os.replace(temporary, path)
+
+
+def image_files(folder: Path) -> list[Path]:
+    """Return the image wallpapers contained in a profile folder, sorted."""
+    try:
+        return sorted(
+            entry for entry in folder.iterdir()
+            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS
+        )
+    except OSError:
+        return []
+
+
+def resolve_wallpaper(folder: str, wallpaper: str) -> str:
+    """Keep the configured wallpaper if it still exists, otherwise fall back
+    to the first image in the profile folder. This prevents a deleted image
+    (or a stale profile entry) from leaving the desktop without a wallpaper."""
+    if wallpaper:
+        candidate = Path(wallpaper).expanduser()
+        if candidate.is_file():
+            return str(candidate)
+    files = image_files(Path(folder).expanduser())
+    if files:
+        return str(files[0])
+    if FALLBACK_WALLPAPER.is_file():
+        return str(FALLBACK_WALLPAPER)
+    return ""
 
 
 def slugify(name: str) -> str:
@@ -73,15 +102,21 @@ def normalize_tabs(tabs) -> dict:
 
 def normalize_profile(profile_id: str, profile: dict) -> dict:
     folder = profile.get("wallpaperFolder") or str(DEFAULT_WALLPAPER_DIR / profile_id)
-    wallpaper = profile.get("wallpaper") or ""
+    wallpaper = resolve_wallpaper(folder, profile.get("wallpaper") or "")
+    try:
+        wallpaper_interval = max(0, int(profile.get("wallpaperInterval", 0) or 0))
+    except (TypeError, ValueError):
+        wallpaper_interval = 0
     return {
         "id": profile_id,
         "name": profile.get("name") or profile_id,
         "wallpaperFolder": folder,
         "wallpaper": wallpaper,
         "preview": wallpaper,
+        "wallpaperInterval": wallpaper_interval,
         "floatingImages": bool(profile.get("floatingImages", False)),
         "weebPolicy": bool(profile.get("weebPolicy", False)),
+        "coloredIcons": bool(profile.get("coloredIcons", profile_id != "sober")),
         "terminal": profile.get("terminal", "cachyos"),
         "tabs": normalize_tabs(profile.get("tabs")),
     }
@@ -110,8 +145,10 @@ def default_profiles() -> dict:
             "name": "Weeb",
             "wallpaperFolder": str(weeb_folder),
             "wallpaper": weeb_wallpaper,
+            "wallpaperInterval": 0,
             "floatingImages": bool(current_floating),
             "weebPolicy": True,
+            "coloredIcons": True,
             "terminal": "pokemon",
             "tabs": tabs,
         }),
@@ -119,8 +156,10 @@ def default_profiles() -> dict:
             "name": "Sober",
             "wallpaperFolder": str(sober_folder),
             "wallpaper": sober_wallpaper,
+            "wallpaperInterval": 0,
             "floatingImages": False,
             "weebPolicy": False,
+            "coloredIcons": False,
             "terminal": "cachyos",
             "tabs": tabs,
         }),
@@ -146,7 +185,11 @@ def load_profiles() -> dict:
     active = data.get("active", next(iter(normalized)))
     if active not in normalized:
         active = next(iter(normalized))
-    return {"active": active, "profiles": normalized}
+    result = {"active": active, "profiles": normalized}
+    # Persist self-healing changes such as a wallpaper that no longer exists.
+    if result != data:
+        save_json(PROFILES_FILE, result)
+    return result
 
 
 def list_payload(data: dict) -> dict:
@@ -193,7 +236,7 @@ def write_runtime_state(profile: dict) -> None:
         (STATE_DIR / f"wallpaper-{profile['id']}").write_text(profile["wallpaper"] + "\n", encoding="utf-8")
 
 
-def apply_profile(data: dict, profile_id: str) -> dict:
+def apply_profile(data: dict, profile_id: str, run_switchwall: bool = True) -> dict:
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     data["active"] = profile_id
@@ -203,7 +246,7 @@ def apply_profile(data: dict, profile_id: str) -> dict:
     update_waypaper(profile)
     write_runtime_state(profile)
     wallpaper = profile.get("wallpaper", "")
-    if wallpaper and Path(wallpaper).is_file() and SWITCHWALL.is_file():
+    if run_switchwall and wallpaper and Path(wallpaper).is_file() and SWITCHWALL.is_file():
         subprocess.run(
             [str(SWITCHWALL), "--image", wallpaper, "--mode", "dark"],
             stdout=subprocess.DEVNULL,
@@ -234,8 +277,10 @@ def create_profile(data: dict, name: str) -> dict:
         "name": name or "New mode",
         "wallpaperFolder": str(folder),
         "wallpaper": wallpaper,
+        "wallpaperInterval": 0,
         "floatingImages": bool(active.get("floatingImages", False)),
         "weebPolicy": bool(active.get("weebPolicy", False)),
+        "coloredIcons": bool(active.get("coloredIcons", True)),
         "terminal": active.get("terminal", "cachyos"),
         "tabs": active.get("tabs", DEFAULT_TABS),
     })
@@ -251,11 +296,20 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
     for key in ("name", "wallpaperFolder", "wallpaper", "terminal"):
         if key in patch and isinstance(patch[key], str):
             profile[key] = patch[key]
-    for key in ("floatingImages", "weebPolicy"):
+    for key in ("floatingImages", "weebPolicy", "coloredIcons"):
         if key in patch:
             profile[key] = bool(patch[key])
+    if "wallpaperInterval" in patch:
+        try:
+            profile["wallpaperInterval"] = max(0, int(patch["wallpaperInterval"]))
+        except (TypeError, ValueError):
+            profile["wallpaperInterval"] = 0
     if "tabs" in patch:
         profile["tabs"] = normalize_tabs({**profile.get("tabs", {}), **patch["tabs"]})
+    # Repair a deleted/renamed wallpaper as soon as the profile is edited.
+    profile["wallpaper"] = resolve_wallpaper(
+        profile.get("wallpaperFolder", ""), profile.get("wallpaper", "")
+    )
     profile["preview"] = profile.get("wallpaper", "")
     data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
@@ -309,6 +363,37 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     return profile
 
 
+def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
+    """Switch the active profile to the next wallpaper in its folder.
+
+    This intentionally only updates the wallpaper path and the state files,
+    not the full color scheme, so periodic rotation stays lightweight."""
+    profile = data["profiles"].get(profile_id or data["active"])
+    if not profile:
+        raise ValueError("No active profile")
+    folder = Path(profile.get("wallpaperFolder", "")).expanduser()
+    files = image_files(folder)
+    if not files:
+        return profile
+
+    current = Path(profile.get("wallpaper", "")).expanduser()
+    try:
+        index = files.index(current)
+    except ValueError:
+        index = -1
+    target = files[(index + 1) % len(files)]
+
+    if str(target) != profile.get("wallpaper"):
+        profile["wallpaper"] = str(target)
+        profile["preview"] = str(target)
+        data["profiles"][profile["id"]] = profile
+        save_json(PROFILES_FILE, data)
+        update_config(profile)
+        update_waypaper(profile)
+        write_runtime_state(profile)
+    return profile
+
+
 def main() -> None:
     command = sys.argv[1] if len(sys.argv) > 1 else "list"
     data = load_profiles()
@@ -318,6 +403,11 @@ def main() -> None:
             print(json.dumps(list_payload(data), ensure_ascii=False))
         elif command == "apply":
             profile = apply_profile(data, sys.argv[2])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "restore":
+            # Used on session startup: restore the last active profile without
+            # regenerating the whole color scheme.
+            profile = apply_profile(data, data["active"], run_switchwall=False)
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "create":
             profile = create_profile(data, sys.argv[2] if len(sys.argv) > 2 else "New mode")
@@ -330,6 +420,9 @@ def main() -> None:
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "set-wallpaper":
             profile = set_wallpaper(data, sys.argv[2])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "rotate-wallpaper":
+            profile = rotate_wallpaper(data, sys.argv[2] if len(sys.argv) > 2 else None)
             print(json.dumps(profile, ensure_ascii=False))
         else:
             raise ValueError(f"Unknown command: {command}")

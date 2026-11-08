@@ -15,16 +15,17 @@ MouseArea {
 
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    cursorShape: Qt.PointingHandCursor
 
-    onPressed: {
-        if (mouse.button === Qt.RightButton) {
+    onPressed: event => {
+        if (event.button === Qt.RightButton) {
             Weather.getData();
             Quickshell.execDetached(["notify-send", 
                 Translation.tr("Weather"), 
                 Translation.tr("Refreshing (manually triggered)")
                 , "-a", "Shell"
             ])
-            mouse.accepted = false
+            event.accepted = false
         }
     }
 
@@ -54,13 +55,15 @@ MouseArea {
         }
     }
 
-    WeatherPopup {
-        id: weatherPopup
-        hoverTarget: root
-    }
-
     CitySearchPopup {
         id: citySearchPopup
         anchorItem: root
+    }
+
+    WeatherPopup {
+        id: weatherPopup
+        hoverTarget: root
+        // Don't stack the hover preview on top of the city search window.
+        active: !citySearchPopup.open && root.containsMouse
     }
 }

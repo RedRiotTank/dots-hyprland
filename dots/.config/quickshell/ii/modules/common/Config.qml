@@ -43,6 +43,14 @@ Singleton {
         obj[keys[keys.length - 1]] = convertedValue;
     }
 
+    // Force pending in-memory changes to disk before an external script
+    // rewrites the config file (e.g. applying a desktop profile).
+    function flush() {
+        if (!root.ready) return;
+        fileWriteTimer.stop();
+        configFileView.writeAdapter();
+    }
+
     Timer {
         id: fileReloadTimer
         interval: root.readWriteDelay

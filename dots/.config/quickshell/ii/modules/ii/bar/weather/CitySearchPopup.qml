@@ -48,8 +48,11 @@ Item {
         Config.options.bar.weather.longitude = result.longitude;
         Config.options.bar.weather.enableGPS = false;
         Config.options.bar.weather.city = `${result.name}, ${result.country}`;
-        Weather.getData();
+        // Persist immediately so a session restart (or another helper
+        // rewriting config.json) cannot restore the previous location.
+        Config.flush();
         root.close();
+        Qt.callLater(() => Weather.getData());
     }
 
     onOpenChanged: {
@@ -57,10 +60,6 @@ Item {
             searchField.text = "";
             root.results = [];
             root.selectedIndex = 0;
-            GlobalFocusGrab.addDismissable(popupWindow);
-            Qt.callLater(() => searchField.forceActiveFocus());
-        } else {
-            GlobalFocusGrab.removeDismissable(popupWindow);
         }
     }
 
@@ -92,11 +91,21 @@ Item {
     PanelWindow {
         id: popupWindow
         visible: root.open
+        screen: root.anchorItem?.QsWindow?.window?.screen ?? null
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "quickshell:weatherCitySearch"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+        onVisibleChanged: {
+            if (visible) {
+                GlobalFocusGrab.addDismissable(popupWindow);
+                Qt.callLater(() => searchField.forceActiveFocus());
+            } else {
+                GlobalFocusGrab.removeDismissable(popupWindow);
+            }
+        }
 
         anchors.left: true
         anchors.top: !Config.options.bar.bottom

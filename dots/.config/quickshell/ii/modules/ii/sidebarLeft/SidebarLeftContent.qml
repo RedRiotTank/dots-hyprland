@@ -13,13 +13,13 @@ Item {
     required property var scopeRoot
     property int sidebarPadding: 10
     anchors.fill: parent
-    property bool editMode: false
     property string selectedTabKey: ""
 
     property var tabDefinitions: [
         {
             key: "ai",
             icon: "neurology",
+            iconSource: "ai-gemini-color.svg",
             name: Translation.tr("AI Chat"),
             component: aiChat,
             available: Config.options.policies.ai !== 0,
@@ -27,6 +27,7 @@ Item {
         {
             key: "translator",
             icon: "translate",
+            iconSource: "translator-color.svg",
             name: Translation.tr("Translator"),
             component: translator,
             available: Config.options.sidebar.translator.enable,
@@ -34,6 +35,7 @@ Item {
         {
             key: "anime",
             icon: "bookmark_heart",
+            iconSource: "anime-color.svg",
             name: Translation.tr("Anime"),
             component: anime,
             available: true,
@@ -48,12 +50,15 @@ Item {
         },
         {
             key: "lyrics",
-            icon: "lyrics",
-            name: Translation.tr("Lyrics"),
-            component: lyrics,
+            icon: "music_note",
+            iconSource: "music-color.svg",
+            name: Translation.tr("Music"),
+            component: music,
             available: true,
         }
     ]
+
+    readonly property bool coloredTabIcons: ProfileManager.activeProfile?.coloredIcons ?? true
 
     readonly property var visibleTabs: root.tabDefinitions.filter(tab => tab.available && root.tabVisible(tab.key))
     property var tabButtonList: root.visibleTabs.map(tab => ({
@@ -71,7 +76,7 @@ Item {
         translator.createObject(),
         anime.createObject(),
         socialFeed.createObject(),
-        lyrics.createObject(),
+        music.createObject(),
     ]
 
     function tabVisible(key) {
@@ -115,11 +120,6 @@ Item {
     }
 
     Keys.onPressed: (event) => {
-        if (event.key === Qt.Key_Escape && root.editMode) {
-            root.editMode = false;
-            event.accepted = true;
-            return;
-        }
         if (event.modifiers === Qt.ControlModifier) {
             if (event.key === Qt.Key_PageDown) {
                 swipeView.incrementCurrentIndex()
@@ -145,7 +145,6 @@ Item {
 
             ToolbarTabBar {
                 id: tabBar
-                visible: !root.editMode
                 Layout.alignment: Qt.AlignHCenter
                 tabButtonList: root.tabButtonList
                 currentIndex: 0
@@ -158,26 +157,13 @@ Item {
                     text: current ? modelData.name : ""
                     materialSymbol: modelData.icon
                     iconSource: modelData.iconSource ?? ""
+                    coloredIcons: root.coloredTabIcons
                     horizontalPadding: 10
                     onClicked: tabBar.setCurrentIndex(index)
 
                     StyledToolTip {
                         text: modelData.name
                     }
-                }
-            }
-
-            IconToolbarButton {
-                id: editButton
-                implicitHeight: 40
-                text: root.editMode ? "close" : "edit"
-                toggled: root.editMode
-                onClicked: root.editMode = !root.editMode
-
-                StyledToolTip {
-                    text: root.editMode
-                        ? Translation.tr("Close tab settings")
-                        : Translation.tr("Customize sidebar tabs")
                 }
             }
         }
@@ -195,7 +181,7 @@ Item {
                 id: swipeView
                 anchors.fill: parent
                 spacing: 10
-                visible: !root.editMode && root.visibleTabs.length > 0
+                visible: root.visibleTabs.length > 0
                 interactive: false
 
                 clip: true
@@ -212,184 +198,13 @@ Item {
             }
 
             PagePlaceholder {
-                shown: root.visibleTabs.length === 0 && !root.editMode
+                shown: root.visibleTabs.length === 0
                 icon: "tab"
                 title: Translation.tr("No tabs are visible")
-                description: Translation.tr("Use the pencil button to enable some tabs")
+                description: Translation.tr("Enable some tabs from Desktop modes")
                 shape: MaterialShape.Shape.Cookie4Sided
             }
 
-            Item { // Tab visibility settings
-                id: editPanel
-                anchors.fill: parent
-                visible: root.editMode
-
-                ColumnLayout {
-                    anchors {
-                        fill: parent
-                        margins: 14
-                    }
-                    spacing: 10
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        MaterialSymbol {
-                            text: "edit"
-                            iconSize: Appearance.font.pixelSize.large
-                            color: Appearance.colors.colOnSurface
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: Translation.tr("Customize sidebar")
-                            color: Appearance.colors.colOnSurface
-                            font {
-                                weight: Font.Medium
-                                pixelSize: Appearance.font.pixelSize.larger
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Choose which tabs are visible. Your choices are saved automatically.")
-                        color: Appearance.colors.colSubtext
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        wrapMode: Text.WordWrap
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 6
-
-                        Repeater {
-                            model: root.tabDefinitions
-
-                            delegate: RippleButton {
-                                id: tabSettingRow
-                                required property var modelData
-
-                                Layout.fillWidth: true
-                                implicitHeight: tabSettingLayout.implicitHeight + 16
-                                buttonRadius: Appearance.rounding.small
-                                colBackground: Appearance.colors.colLayer2
-                                colBackgroundHover: Appearance.colors.colLayer1Hover
-                                enabled: tabSettingRow.modelData.available
-
-                                onClicked: {
-                                    root.setTabVisible(
-                                        tabSettingRow.modelData.key,
-                                        !root.tabVisible(tabSettingRow.modelData.key)
-                                    );
-                                }
-
-                                contentItem: RowLayout {
-                                    id: tabSettingLayout
-                                    anchors {
-                                        fill: parent
-                                        margins: 8
-                                    }
-                                    spacing: 10
-
-                                    CustomIcon {
-                                        visible: (tabSettingRow.modelData.iconSource ?? "").length > 0
-                                        source: tabSettingRow.modelData.iconSource ?? ""
-                                        width: 24
-                                        height: 24
-                                    }
-
-                                    MaterialSymbol {
-                                        visible: (tabSettingRow.modelData.iconSource ?? "").length === 0
-                                        text: tabSettingRow.modelData.icon
-                                        iconSize: Appearance.font.pixelSize.large
-                                        color: tabSettingRow.modelData.available
-                                            ? Appearance.colors.colOnSurface
-                                            : Appearance.colors.colSubtext
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 0
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: tabSettingRow.modelData.name
-                                            color: Appearance.colors.colOnSurface
-                                            font {
-                                                weight: Font.Medium
-                                                pixelSize: Appearance.font.pixelSize.normal
-                                            }
-                                        }
-
-                                        StyledText {
-                                            Layout.fillWidth: true
-                                            text: tabSettingRow.modelData.available
-                                                ? Translation.tr("Show this tab")
-                                                : Translation.tr("Unavailable until enabled in settings")
-                                            color: Appearance.colors.colSubtext
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            wrapMode: Text.WordWrap
-                                        }
-                                    }
-
-                                    StyledSwitch {
-                                        checked: root.tabVisible(tabSettingRow.modelData.key)
-                                        enabled: false
-                                        opacity: 1
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Item {
-                        Layout.fillHeight: true
-                    }
-
-                    RippleButton {
-                        Layout.fillWidth: true
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: Appearance.colors.colLayer2
-                        onClicked: Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "modeSelector", "toggle"])
-
-                        contentItem: RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
-
-                            MaterialSymbol {
-                                text: "palette"
-                                iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colOnSurface
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: Translation.tr("Desktop modes")
-                                color: Appearance.colors.colOnSurface
-                                font.pixelSize: Appearance.font.pixelSize.small
-                            }
-
-                            MaterialSymbol {
-                                text: "chevron_right"
-                                iconSize: Appearance.font.pixelSize.normal
-                                color: Appearance.colors.colSubtext
-                            }
-                        }
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Tip: you can also use the pencil button to close this panel.")
-                        color: Appearance.colors.colSubtext
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        wrapMode: Text.WordWrap
-                    }
-                }
-            }
         }
     }
 
@@ -410,7 +225,7 @@ Item {
         SocialFeed {}
     }
     Component {
-        id: lyrics
-        Lyrics {}
+        id: music
+        Music {}
     }
 }

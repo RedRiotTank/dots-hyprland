@@ -11,16 +11,20 @@ import qs.modules.common.widgets.widgetCanvas
 Item {
     id: root
     focus: true
+    property string screenName: ""
+    // True only on the focused monitor while the overlay is open. Pinned-only
+    // overlay windows on other monitors render just their pinned widgets.
+    property bool interactive: false
     readonly property bool usePasswordChars: !PolkitService.flow?.responseVisible ?? true
 
     Keys.onPressed: (event) => { // Esc to close
-        if (event.key === Qt.Key_Escape) {
+        if (event.key === Qt.Key_Escape && root.interactive) {
             GlobalStates.overlayOpen = false;
         }
     }
 
     property real initScale: Config.options.overlay.openingZoomAnimation ? 1.08 : 1.000001
-    scale: initScale
+    scale: root.interactive ? root.initScale : 1
     Component.onCompleted: {
         scale = 1
     }
@@ -32,8 +36,8 @@ Item {
         id: bg
         anchors.fill: parent
         color: Appearance.colors.colScrim
-        visible: Config.options.overlay.darkenScreen && opacity > 0
-        opacity: (GlobalStates.overlayOpen && root.scale !== initScale) ? 1 : 0
+        visible: root.interactive && Config.options.overlay.darkenScreen && opacity > 0
+        opacity: (root.interactive && root.scale !== root.initScale) ? 1 : 0
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
@@ -41,9 +45,14 @@ Item {
 
     WidgetCanvas {
         anchors.fill: parent
-        onClicked: GlobalStates.overlayOpen = false
+        onClicked: {
+            if (root.interactive)
+                GlobalStates.overlayOpen = false;
+        }
 
         OverlayTaskbar {
+            visible: root.interactive
+            screenName: root.screenName
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 top: parent.top
@@ -54,6 +63,12 @@ Item {
         Repeater {
             model: ScriptModel {
                 values: Persistent.states.overlay.open
+                    .filter(identifier => {
+                        const state = Persistent.states.overlay[identifier];
+                        if (!state) return false;
+                        if (!root.interactive && state.pinned !== true) return false;
+                        return OverlayContext.widgetScreenName(identifier) === root.screenName;
+                    })
                     .map(identifier => OverlayContext.definitionFor(identifier))
                     .filter(entry => entry !== null)
                 objectProp: "identifier"
