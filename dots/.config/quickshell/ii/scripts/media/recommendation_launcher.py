@@ -21,6 +21,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
 LOG_FILE = Path.home() / ".cache" / "quickshell" / "recommendation_launcher.log"
+TOKEN_FILE = Path.home() / ".config" / "illogical-impulse" / "spotify_token.json"
 ENV_FILES = [
     Path.home() / ".config" / "uwsm" / "env",
     Path.home() / ".config" / "uwsm" / "env.local",
@@ -216,6 +217,100 @@ def spotify_track_uri(queries: list[str]) -> str:
     return ""
 
 
+def spotify_user_token() -> str:
+    try:
+        data = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        log("spotify user token not configured; run spotify_auth.py")
+        return ""
+
+    refresh_token = data.get("refresh_token", "")
+    if not refresh_token:
+        return ""
+
+    client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+    client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        log("spotify user token refresh requires client credentials")
+        return ""
+
+    try:
+        credentials = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+        request = urllib.request.Request(
+            "https://accounts.spotify.com/api/token",
+            data=urllib.parse.urlencode({
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            }).encode(),
+            headers={
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=12) as response:
+            refreshed = json.loads(response.read().decode("utf-8"))
+        access_token = refreshed.get("access_token", "")
+        if refreshed.get("refresh_token"):
+            data["refresh_token"] = refreshed["refresh_token"]
+        if access_token:
+            data["access_token"] = access_token
+            TOKEN_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            os.chmod(TOKEN_FILE, 0o600)
+        log(f"spotify user token {'ok' if access_token else 'missing'}")
+        return access_token
+    except Exception as error:
+        log(f"spotify user token error: {type(error).__name__}: {error}")
+        return ""
+
+
+def spotify_play_track(uri: str) -> bool:
+    token = spotify_user_token()
+    if not token:
+        return False
+
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": USER_AGENT}
+    try:
+        devices_request = urllib.request.Request(
+            "https://api.spotify.com/v1/me/player/devices",
+            headers=headers,
+        )
+        with urllib.request.urlopen(devices_request, timeout=12) as response:
+            devices = json.loads(response.read().decode("utf-8")).get("devices", [])
+    except Exception as error:
+        log(f"spotify device lookup error: {type(error).__name__}: {error}")
+        return False
+
+    if not devices:
+        log("spotify web playback: no devices")
+        return False
+
+    device = next((item for item in devices if item.get("is_active")), devices[0])
+    device_id = device.get("id", "")
+    if not device_id:
+        return False
+
+    try:
+        request = urllib.request.Request(
+            "https://api.spotify.com/v1/me/player/play?device_id=" + urllib.parse.quote(device_id),
+            data=json.dumps({"uris": [uri]}).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "User-Agent": USER_AGENT,
+            },
+            method="PUT",
+        )
+        with urllib.request.urlopen(request, timeout=12) as response:
+            if response.status in (200, 202, 204):
+                log(f"spotify web playback ok {uri} on {device.get('name', device_id)}")
+                return True
+    except Exception as error:
+        log(f"spotify web playback error: {type(error).__name__}: {error}")
+
+    return False
+
+
 def first_youtube_video_id(query: str) -> str:
     search_url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query)
     request = urllib.request.Request(search_url, headers={"User-Agent": USER_AGENT})
@@ -245,6 +340,10 @@ def main() -> None:
         queries.extend([query, title, artist])
         uri = spotify_track_uri(queries)
         if uri:
+            if spotify_play_track(uri):
+                return
+            # Fallback for users who have not completed the one-time
+            # authorization: use MPRIS and restore focus immediately.
             focus_state = capture_focus_state()
             open_spotify_uri(uri)
             restore_focus_if_stolen(focus_state)
