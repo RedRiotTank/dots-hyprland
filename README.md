@@ -386,19 +386,31 @@ remaps a few defaults.
 
 ### Direct Spotify recommendation playback
 
-Spotify does not provide anonymous track search or playback without app credentials. To let
-recommendations launch the actual track in the Spotify desktop client, export:
+Spotify does not provide anonymous track search or playback without app credentials.
 
-```bash
-export SPOTIFY_CLIENT_ID="your_client_id"
-export SPOTIFY_CLIENT_SECRET="your_client_secret"
-```
+1. Create an app at <https://developer.spotify.com/dashboard>.
+2. Add this redirect URI to the app settings:
+   ```text
+   http://127.0.0.1:8888/callback
+   ```
+3. Export the credentials in your session environment, for example in
+   `~/.config/uwsm/env`:
+   ```bash
+   export SPOTIFY_CLIENT_ID="your_client_id"
+   export SPOTIFY_CLIENT_SECRET="your_client_secret"
+   ```
+4. Restart the session, then run the one-time authorization helper:
+   ```bash
+   python3 ~/.config/quickshell/ii/scripts/media/spotify_auth.py
+   ```
+5. Approve the requested Spotify permissions in the browser.
 
-Put them in your session environment, for example in `~/.config/uwsm/env`, then restart the
-session. Create a Spotify application at <https://developer.spotify.com/dashboard> if needed.
+After authorization, recommendations are started through the Spotify Web API. This changes the
+track without opening or focusing the Spotify window, so you stay on your current workspace.
 
-Without credentials, clicking a recommendation in Spotify opens the exact search in Spotify.
-YouTube and YouTube Music recommendations open directly in the browser.
+Without the one-time authorization, the fork falls back to opening the track through MPRIS and
+restores focus immediately afterwards. YouTube and YouTube Music recommendations still resolve
+and open the matching video directly.
 
 ### Waypaper
 
