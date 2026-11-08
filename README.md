@@ -110,7 +110,7 @@ Recommendations open on the platform that is currently playing:
 | Active platform | Behavior |
 | --- | --- |
 | YouTube / YouTube Music | Resolves the first matching video and opens it directly. |
-| Spotify | Opens the exact track search in Spotify. Direct playback is supported when API credentials are configured (see [Optional integrations](#optional-integrations)). |
+| Spotify | Resolves the exact track and starts it through MPRIS. A temporary Hyprland `no_focus` rule keeps Spotify from raising its window, so focus and workspace do not move. Spotify API credentials are required for exact matching. |
 | Unknown player | Falls back to a YouTube search. |
 
 ### New Reddit tab
@@ -231,8 +231,8 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 
 - `waypaper` — optional wallpaper picker bound to `Super + Alt + W`.
 - `pokemon-colorscripts-git` — optional Pokemon terminal greeting.
-- A local Spotify client, and optionally Spotify API credentials, for the best
-  recommendation experience.
+- A local Spotify client, plus Spotify API credentials if you want exact Spotify track
+  recommendations.
 
 ---
 
@@ -359,8 +359,8 @@ See the upstream uninstall documentation for details about files and services th
 4. Open `Super + Shift + W` and create/edit your desktop modes.
 5. Add wallpapers to the profile folders, or pick one from the built-in selector.
 6. Optional: install `waypaper` and `pokemon-colorscripts-git` for the corresponding extras.
-7. Optional: configure Spotify API credentials if you want direct Spotify playback from
-   recommendations.
+7. Optional: configure Spotify API credentials so Spotify recommendations resolve and play the
+   exact track.
 
 ---
 
@@ -384,33 +384,44 @@ remaps a few defaults.
 
 ## Optional integrations
 
-### Direct Spotify recommendation playback
+### Spotify recommendation playback
 
-Spotify does not provide anonymous track search or playback without app credentials.
+Spotify does not provide anonymous track search. Add app credentials so the launcher can resolve
+a recommended track to its exact Spotify URI:
 
 1. Create an app at <https://developer.spotify.com/dashboard>.
-2. Add this redirect URI to the app settings:
-   ```text
-   http://127.0.0.1:8888/callback
-   ```
-3. Export the credentials in your session environment, for example in
-   `~/.config/uwsm/env`:
+2. Export the credentials in your session environment, for example in `~/.config/uwsm/env`:
    ```bash
    export SPOTIFY_CLIENT_ID="your_client_id"
    export SPOTIFY_CLIENT_SECRET="your_client_secret"
    ```
-4. Restart the session, then run the one-time authorization helper:
+3. Restart the session.
+
+Playback then goes through MPRIS. Before opening the track, the launcher enables a temporary
+`no_focus` window rule for Spotify and disables it immediately afterwards. Spotify changes the
+song without raising its window, focusing it, or switching workspaces.
+
+No OAuth authorization is required for this path. If you also want to experiment with Spotify
+Web API Remote Play, authorize the app once and opt in explicitly:
+
+1. Add this redirect URI to the Spotify app settings:
+   ```text
+   http://127.0.0.1:8888/callback
+   ```
+2. Run the one-time authorization helper:
    ```bash
    python3 ~/.config/quickshell/ii/scripts/media/spotify_auth.py
    ```
-5. Approve the requested Spotify permissions in the browser.
+3. Approve the requested permissions in the browser.
+4. Add the opt-in to your session environment:
+   ```bash
+   export SPOTIFY_FORCE_WEB_PLAYBACK=1
+   ```
 
-After authorization, recommendations are started through the Spotify Web API. This changes the
-track without opening or focusing the Spotify window, so you stay on your current workspace.
-
-Without the one-time authorization, the fork falls back to opening the track through MPRIS and
-restores focus immediately afterwards. YouTube and YouTube Music recommendations still resolve
-and open the matching video directly.
+Some Spotify Linux clients accept the Remote Play command and then stop playback. The default
+MPRIS path is more reliable and already avoids focus changes; if Remote Play fails, the launcher
+automatically falls back to it. YouTube and YouTube Music recommendations still resolve and open
+the matching video directly.
 
 ### Waypaper
 
@@ -461,8 +472,9 @@ playerctl -l
 playerctl metadata --format '{{playerName}} {{title}}'
 ```
 
-Spotify direct playback requires the credentials described above. YouTube and YouTube Music
-open directly.
+Exact Spotify matching requires the credentials described above. Without them, Spotify
+recommendations open a search page instead of a specific track. YouTube and YouTube Music open
+directly.
 
 ### I want the upstream experience
 
