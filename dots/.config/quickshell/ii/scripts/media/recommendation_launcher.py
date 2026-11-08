@@ -153,10 +153,45 @@ def set_spotify_no_focus(enabled: bool) -> bool:
         return False
 
 
+def get_cursor_no_warps() -> bool:
+    try:
+        output = subprocess.check_output(
+            ["hyprctl", "getoption", "cursor:no_warps"],
+            text=True,
+            timeout=4,
+        )
+        for line in output.splitlines():
+            if line.strip().lower().startswith("bool:"):
+                return "true" in line.lower()
+        return False
+    except Exception:
+        return False
+
+
+def set_cursor_no_warps(enabled: bool) -> None:
+    try:
+        subprocess.run(
+            [
+                "hyprctl",
+                "eval",
+                f'hl.config({{cursor={{no_warps={"true" if enabled else "false"}}}}})',
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=4,
+        )
+    except Exception:
+        pass
+
+
 def set_animations(enabled: bool) -> None:
     try:
         subprocess.run(
-            ["hyprctl", "keyword", "animations:enabled", "true" if enabled else "false"],
+            [
+                "hyprctl",
+                "eval",
+                f'hl.config({{animations={{enabled={"true" if enabled else "false"}}}}})',
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=4,
@@ -166,8 +201,13 @@ def set_animations(enabled: bool) -> None:
 
 
 def recommend_without_focus(uri: str) -> bool:
-    """Fallback path: start the track through MPRIS without raising Spotify."""
+    """Start the track through MPRIS without raising Spotify."""
     focus_state = capture_focus_state()
+    previous_no_warps = get_cursor_no_warps()
+    if not previous_no_warps:
+        # no_focus prevents Spotify from taking keyboard focus, but Hyprland
+        # still warps the pointer to its window. Disable warps for this click.
+        set_cursor_no_warps(True)
     no_focus_rule = set_spotify_no_focus(True)
     if not no_focus_rule:
         # Older Hyprland versions may not expose hl.window_rule through
@@ -175,13 +215,21 @@ def recommend_without_focus(uri: str) -> bool:
         set_animations(False)
     try:
         open_spotify_uri(uri)
-        restore_focus_state(focus_state)
+        active = hyprctl_json(["activewindow", "-j"])
+        focus_stolen = (
+            str(active.get("class", "")).lower() == "spotify"
+            and str(focus_state.get("class", "")).lower() != "spotify"
+        )
+        if focus_stolen or not no_focus_rule:
+            restore_focus_state(focus_state)
     finally:
         if no_focus_rule:
             set_spotify_no_focus(False)
         else:
             time.sleep(0.05)
             set_animations(True)
+        if not previous_no_warps:
+            set_cursor_no_warps(False)
     return True
 
 
