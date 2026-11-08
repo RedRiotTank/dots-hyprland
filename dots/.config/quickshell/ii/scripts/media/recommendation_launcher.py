@@ -59,6 +59,70 @@ def log(message: str) -> None:
         pass
 
 
+def hyprctl_json(args: list[str]) -> dict:
+    try:
+        output = subprocess.check_output(["hyprctl", *args], text=True, timeout=4)
+        return json.loads(output)
+    except Exception:
+        return {}
+
+
+def capture_focus_state() -> dict:
+    active = hyprctl_json(["activewindow", "-j"])
+    if active.get("address"):
+        return {
+            "window": f"address:{active['address']}",
+            "class": str(active.get("class", "")),
+        }
+
+    monitors = hyprctl_json(["monitors", "-j"])
+    focused = next((monitor for monitor in monitors if monitor.get("focused")), None)
+    if not focused:
+        return {}
+    workspace = focused.get("activeWorkspace", {}).get("id", "")
+    return {
+        "workspace": str(workspace),
+        "monitor": str(focused.get("name", "")),
+        "class": "",
+    }
+
+
+def restore_focus_state(state: dict) -> None:
+    if not state:
+        return
+    try:
+        if state.get("window"):
+            subprocess.run(
+                ["hyprctl", "dispatch", f'hl.dsp.focus({{window="{state["window"]}"}})'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=4,
+            )
+        elif state.get("workspace"):
+            subprocess.run(
+                ["hyprctl", "dispatch", f'hl.dsp.focus({{workspace="{state["workspace"]}"}})'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=4,
+            )
+        log(f"restored focus to {state.get('window') or state.get('workspace')}")
+    except Exception as error:
+        log(f"focus restore failed: {type(error).__name__}: {error}")
+
+
+def restore_focus_if_stolen(state: dict) -> None:
+    if not state or str(state.get("class", "")).lower() == "spotify":
+        return
+
+    deadline = time.monotonic() + 1.2
+    while time.monotonic() < deadline:
+        active = hyprctl_json(["activewindow", "-j"])
+        if str(active.get("class", "")).lower() == "spotify":
+            restore_focus_state(state)
+            return
+        time.sleep(0.025)
+
+
 def open_url(url: str) -> None:
     log(f"open_url {url}")
     subprocess.Popen(
@@ -181,7 +245,9 @@ def main() -> None:
         queries.extend([query, title, artist])
         uri = spotify_track_uri(queries)
         if uri:
+            focus_state = capture_focus_state()
             open_spotify_uri(uri)
+            restore_focus_if_stolen(focus_state)
         else:
             log("spotify direct lookup failed; falling back to search")
             open_url("spotify:search:" + urllib.parse.quote(query))
