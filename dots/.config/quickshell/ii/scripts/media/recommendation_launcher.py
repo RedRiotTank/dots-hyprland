@@ -22,6 +22,7 @@ USER_AGENT = (
 )
 LOG_FILE = Path.home() / ".cache" / "quickshell" / "recommendation_launcher.log"
 TOKEN_FILE = Path.home() / ".config" / "illogical-impulse" / "spotify_token.json"
+PLAYBACK_STATE_FILE = Path.home() / ".cache" / "quickshell" / "spotify_playback_state.json"
 ENV_FILES = [
     Path.home() / ".config" / "uwsm" / "env",
     Path.home() / ".config" / "uwsm" / "env.local",
@@ -122,6 +123,66 @@ def restore_focus_if_stolen(state: dict) -> None:
             restore_focus_state(state)
             return
         time.sleep(0.025)
+
+
+def set_spotify_no_focus(enabled: bool) -> bool:
+    """Temporarily stop Spotify from raising its window on MPRIS OpenUri."""
+    if enabled:
+        code = (
+            'if not _recommendation_spotify_no_focus then '
+            '_recommendation_spotify_no_focus = hl.window_rule({'
+            'name="recommendation-spotify-no-focus", '
+            'match={class="^(Spotify)$"}, no_focus=true}) '
+            'else _recommendation_spotify_no_focus:set_enabled(true) end'
+        )
+    else:
+        code = (
+            'if _recommendation_spotify_no_focus then '
+            '_recommendation_spotify_no_focus:set_enabled(false) end'
+        )
+    try:
+        result = subprocess.run(
+            ["hyprctl", "eval", code],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=4,
+        )
+        return result.returncode == 0
+    except Exception as error:
+        log(f"spotify no-focus rule failed: {type(error).__name__}: {error}")
+        return False
+
+
+def set_animations(enabled: bool) -> None:
+    try:
+        subprocess.run(
+            ["hyprctl", "keyword", "animations:enabled", "true" if enabled else "false"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=4,
+        )
+    except Exception:
+        pass
+
+
+def recommend_without_focus(uri: str) -> bool:
+    """Fallback path: start the track through MPRIS without raising Spotify."""
+    focus_state = capture_focus_state()
+    no_focus_rule = set_spotify_no_focus(True)
+    if not no_focus_rule:
+        # Older Hyprland versions may not expose hl.window_rule through
+        # hyprctl eval. Hide the workspace switch instead.
+        set_animations(False)
+    try:
+        open_spotify_uri(uri)
+        restore_focus_state(focus_state)
+    finally:
+        if no_focus_rule:
+            set_spotify_no_focus(False)
+        else:
+            time.sleep(0.05)
+            set_animations(True)
+    return True
 
 
 def open_url(url: str) -> None:
@@ -264,6 +325,37 @@ def spotify_user_token() -> str:
         return ""
 
 
+def web_api_playback_allowed() -> bool:
+    """Check whether the optional Remote Play path should be attempted."""
+    if os.environ.get("SPOTIFY_FORCE_WEB_PLAYBACK") != "1":
+        return False
+    try:
+        data = json.loads(PLAYBACK_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return True
+    if data.get("ok"):
+        return True
+    try:
+        checked_at = float(data.get("checked_at", 0))
+    except (TypeError, ValueError):
+        checked_at = 0
+    if time.time() - checked_at > 86400:
+        return True
+    log("spotify web playback disabled after a previous failure; using MPRIS fallback")
+    return False
+
+
+def record_web_api_playback(ok: bool) -> None:
+    try:
+        PLAYBACK_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PLAYBACK_STATE_FILE.write_text(
+            json.dumps({"ok": ok, "checked_at": time.time()}),
+            encoding="utf-8",
+        )
+    except Exception as error:
+        log(f"spotify playback state write failed: {type(error).__name__}: {error}")
+
+
 def spotify_play_track(uri: str) -> bool:
     token = spotify_user_token()
     if not token:
@@ -285,10 +377,31 @@ def spotify_play_track(uri: str) -> bool:
         log("spotify web playback: no devices")
         return False
 
-    device = next((item for item in devices if item.get("is_active")), devices[0])
+    active_device = next((item for item in devices if item.get("is_active")), None)
+    if active_device:
+        device = active_device
+    else:
+        device = next((item for item in devices if item.get("type") == "Computer"), devices[0])
     device_id = device.get("id", "")
     if not device_id:
         return False
+
+    if not active_device:
+        try:
+            transfer = urllib.request.Request(
+                "https://api.spotify.com/v1/me/player",
+                data=json.dumps({"device_ids": [device_id], "play": False}).encode(),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": USER_AGENT,
+                },
+                method="PUT",
+            )
+            with urllib.request.urlopen(transfer, timeout=12) as response:
+                log(f"spotify transfer playback {response.status}")
+        except Exception as error:
+            log(f"spotify transfer error: {type(error).__name__}: {error}")
 
     try:
         request = urllib.request.Request(
@@ -302,11 +415,36 @@ def spotify_play_track(uri: str) -> bool:
             method="PUT",
         )
         with urllib.request.urlopen(request, timeout=12) as response:
-            if response.status in (200, 202, 204):
-                log(f"spotify web playback ok {uri} on {device.get('name', device_id)}")
-                return True
+            if response.status not in (200, 202, 204):
+                log(f"spotify web playback unexpected status {response.status}")
+                return False
     except Exception as error:
         log(f"spotify web playback error: {type(error).__name__}: {error}")
+        return False
+
+    # A 204 only means the command was accepted. Verify that the player really
+    # switched to the requested track before skipping the fallback path.
+    time.sleep(0.9)
+    try:
+        state_request = urllib.request.Request(
+            "https://api.spotify.com/v1/me/player",
+            headers=headers,
+        )
+        with urllib.request.urlopen(state_request, timeout=12) as response:
+            if response.status == 204:
+                log("spotify web playback did not activate a device")
+                return False
+            state = json.loads(response.read().decode("utf-8"))
+        item = state.get("item") or {}
+        if state.get("is_playing") and item.get("uri") == uri:
+            log(f"spotify web playback ok {uri} on {device.get('name', device_id)}")
+            return True
+        log(
+            "spotify web playback was accepted but did not start "
+            f"(playing={state.get('is_playing')} item={item.get('uri')!r})"
+        )
+    except Exception as error:
+        log(f"spotify playback verification error: {type(error).__name__}: {error}")
 
     return False
 
@@ -340,13 +478,15 @@ def main() -> None:
         queries.extend([query, title, artist])
         uri = spotify_track_uri(queries)
         if uri:
-            if spotify_play_track(uri):
-                return
-            # Fallback for users who have not completed the one-time
-            # authorization: use MPRIS and restore focus immediately.
-            focus_state = capture_focus_state()
-            open_spotify_uri(uri)
-            restore_focus_if_stolen(focus_state)
+            if TOKEN_FILE.exists() and web_api_playback_allowed():
+                if spotify_play_track(uri):
+                    record_web_api_playback(True)
+                    return
+                record_web_api_playback(False)
+            # Start the track through MPRIS with a temporary Hyprland
+            # no_focus rule, so Spotify does not raise itself or switch
+            # workspaces. Restore focus as a safety net.
+            recommend_without_focus(uri)
         else:
             log("spotify direct lookup failed; falling back to search")
             open_url("spotify:search:" + urllib.parse.quote(query))
