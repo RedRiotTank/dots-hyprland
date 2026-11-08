@@ -4,7 +4,7 @@
 
 # Illogical Impulse — Opinionated Edition
 
-**A personal, opinionated fork of [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) with desktop profiles, a rebuilt music experience, and multi-monitor overlay improvements.**
+**A personal, opinionated fork of [end-4/dots-hyprland](https://github.com/end-4/dots-hyprland) with configurable desktop profiles, a new Music tab, and multi-monitor overlay improvements.**
 
 [![Upstream](https://img.shields.io/badge/upstream-end--4%2Fdots--hyprland-1f6feb?style=for-the-badge&logo=github)](https://github.com/end-4/dots-hyprland)
 [![Fork](https://img.shields.io/badge/fork-RedRiotTank%2Fdots--hyprland-8957e5?style=for-the-badge&logo=github)](https://github.com/RedRiotTank/dots-hyprland)
@@ -58,7 +58,7 @@ This fork is not affiliated with, endorsed by, or supported by the upstream proj
 It is intended for people who want:
 
 - multiple configurable **desktop modes/profiles**;
-- a **music-first sidebar** with synced lyrics and recommendations;
+- a **Music tab** with lyrics, playback, and recommendations;
 - a **multi-monitor-aware overlay** for floating images;
 - a small set of practical quality-of-life fixes.
 
@@ -68,19 +68,20 @@ The fork is distributed under the same GPL-3.0 license as upstream.
 
 ## Highlights
 
-### Configurable desktop modes
+Everything in this section is an addition or extension compared with upstream
+illogical-impulse.
 
-The old `weeb` / `sober` idea is now a full profile system.
+### Extended desktop modes (profiles)
 
-Each desktop mode can define:
+Upstream illogical-impulse offers a **weeb policy** switch. This fork extends that idea into a
+full desktop-mode system:
 
-- a wallpaper folder;
-- a selected wallpaper;
-- an optional wallpaper rotation interval;
+- unlimited profiles, each with its own wallpaper folder;
+- a selected wallpaper and optional wallpaper rotation interval;
 - floating-image visibility;
 - colored or flat sidebar icons;
 - terminal greeting style (`pokemon-colorscripts` or CachyOS `fastfetch`);
-- which sidebar tabs are visible.
+- per-profile sidebar tab visibility.
 
 Profiles are stored in:
 
@@ -88,18 +89,20 @@ Profiles are stored in:
 ~/.config/illogical-impulse/profiles.json
 ```
 
-The active mode is restored automatically at login. A mode selector is available with
-`Super + Shift + W`, including wallpaper previews and live editing.
+The last active profile is restored automatically at login. A preview-based mode selector is
+available with `Super + Shift + W`, and profiles can be created, edited, applied, or deleted
+without leaving the shell.
 
-### Music tab
+### New Music tab
 
-The old **Lyrics** tab has been replaced by a full **Music** tab:
+This fork adds a **Music** tab to the left sidebar. It combines the existing lyrics workflow
+with a complete playback-focused view:
 
-- album art;
-- Spotify-style vertically scrolling synced lyrics;
+- album art with title and artist;
+- synced lyrics that scroll vertically, Spotify-style, with the current line highlighted;
 - elapsed time, remaining time, and a seekable progress bar;
 - previous / play-pause / next controls;
-- cava visualizer attached to the bottom edge of the panel;
+- a cava visualizer flush with the bottom edge of the panel;
 - recommended tracks based on the current artist.
 
 Recommendations open on the platform that is currently playing:
@@ -110,38 +113,59 @@ Recommendations open on the platform that is currently playing:
 | Spotify | Opens the exact track search in Spotify. Direct playback is supported when API credentials are configured (see [Optional integrations](#optional-integrations)). |
 | Unknown player | Falls back to a YouTube search. |
 
-### Multi-monitor overlay
+### New Reddit tab
 
-Pinned overlay widgets now remember:
+- A dedicated **Reddit** sidebar tab with the Reddit logo and branding.
+- Reddit feeds are fetched from the public Reddit JSON API first, with RSS and cache fallbacks.
+- The tab participates in the same per-profile visibility and colored/flat icon settings as the
+  rest of the sidebar.
 
-- their position;
-- their scale;
-- the monitor they belong to.
+### Anime improvements
 
-`Super + G` opens the overlay on the monitor under the cursor/focus, while pinned floating
-images remain on their own monitor. This makes it possible to build independent overlay
-layouts per screen.
+- Booru images are requested using the larger sample/file URL instead of the tiny preview
+  thumbnail, so cards and wallpapers keep their resolution.
+- Image and monitor resolutions are compared before applying a booru image as the wallpaper.
+  A confirmation dialog is shown for images that are too small.
+- A **Set as Wallpaper** action was added to the booru context menu.
+- The wallpaper is copied into the active desktop profile's folder and applied through the
+  current profile helper.
+- Images can be opened, downloaded, or selected as the wallpaper from the same menu.
 
-### Sidebar polish
+### Multi-monitor overlay and floating images
 
-- Removed the old in-sidebar edit panel. Tab visibility is configured from **Desktop modes**.
-- Added a per-profile **Colored icons** toggle.
-- Colored brand-style icons are provided for AI, Translator, Anime, Reddit, and Music.
-- The same icons are automatically rendered as flat, theme-colored glyphs when colored icons
-  are disabled.
+The overlay is now aware of multiple monitors:
 
-### Weather
+- pinned widgets remember their position, scale, and monitor;
+- `Super + G` opens the overlay on the monitor under the cursor/focus;
+- pinned floating images stay on their own monitor;
+- each monitor can keep its own widget layout.
 
-- City search popup opens on the correct monitor.
-- Selected coordinates and city are persisted.
-- Weather requests retry after a session restart if the network is not ready yet.
-- Weather values are restored correctly across profile switches.
+Floating images additionally gain:
 
-### Privacy and wallpaper details
+- multiple independent image slots;
+- a per-image file picker;
+- multiple image sources instead of a single global image;
+- persisted positions and scales across sessions.
 
-- Relative wallpaper paths are repaired automatically when an image is deleted.
-- Broken or partially downloaded album artwork is detected and re-downloaded.
-- The wallpaper selector and waypaper integration use the active profile's folder.
+### Sidebar and bar quality of life
+
+- Tab visibility is configured from **Desktop modes**, removing the old in-sidebar editor.
+- Added a per-profile **Colored icons** toggle with colored brand-style icons for AI,
+  Translator, Anime, Reddit, and Music; the same icons can be rendered as flat theme glyphs.
+- Clicking the resource meters in the top bar opens **btop** in the configured terminal.
+- Resource indicators use a pointer cursor when hovered.
+- The weather popup and city search open on the correct monitor and remember the selected city
+  and coordinates.
+- Weather fetching retries after login if the network is not ready yet.
+- The built-in wallpaper selector and waypaper integration use the active profile's wallpaper
+  folder.
+
+### Wallpaper and artwork reliability
+
+- Missing or deleted profile wallpapers are repaired automatically from the profile folder.
+- A bundled default wallpaper is used on a fresh installation when a profile folder is empty.
+- Album artwork is validated before use; incomplete downloads are re-downloaded automatically.
+- Wallpaper rotation keeps track of the last displayed image across sessions.
 
 ---
 
