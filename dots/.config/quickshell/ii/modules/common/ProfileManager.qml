@@ -1,0 +1,169 @@
+pragma Singleton
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+Singleton {
+    id: root
+
+    property var profileList: []
+    property string activeId: ""
+    readonly property var activeProfile: root.profileList.find(profile => profile.id === root.activeId) ?? null
+    readonly property string helperPath: `${Quickshell.env("HOME")}/.config/hypr/custom/scripts/profiles.py`
+
+    property var pendingAction: null
+
+    Timer {
+        id: tabsSaveTimer
+        interval: 220
+        repeat: false
+        onTriggered: {
+            const profile = root.activeProfile;
+            if (!profile) return;
+            root.updateProfile(profile.id, { tabs: profile.tabs });
+        }
+    }
+
+    function reload() {
+        listProcess.running = false;
+        listProcess.command = ["python3", root.helperPath, "list"];
+        listProcess.running = true;
+    }
+
+    function profileById(profileId) {
+        return root.profileList.find(profile => profile.id === profileId) ?? null;
+    }
+
+    function tabVisible(key) {
+        const tabs = root.activeProfile?.tabs;
+        if (!tabs) return true;
+        return tabs[key] !== false;
+    }
+
+    function replaceLocalProfile(profile) {
+        const list = root.profileList.slice();
+        const index = list.findIndex(item => item.id === profile.id);
+        if (index >= 0) list[index] = profile;
+        root.profileList = list;
+    }
+
+    function setTabVisible(key, value) {
+        const profile = root.activeProfile;
+        if (!profile) return;
+        const tabs = Object.assign({}, profile.tabs ?? {}, { [key]: value });
+        root.replaceLocalProfile(Object.assign({}, profile, { tabs: tabs }));
+        tabsSaveTimer.restart();
+    }
+
+    function setFloatingImages(value) {
+        const profile = root.activeProfile;
+        if (!profile) return;
+        root.replaceLocalProfile(Object.assign({}, profile, { floatingImages: value }));
+        Config.options.policies.floatingImages = value;
+        root.updateProfile(profile.id, { floatingImages: value });
+    }
+
+    function runAction(args, callback) {
+        if (actionProcess.running) {
+            root.pendingAction = { args: args, callback: callback };
+            return;
+        }
+        actionProcess.command = ["python3", root.helperPath].concat(args);
+        actionProcess.currentCallback = callback;
+        actionProcess.running = true;
+    }
+
+    function applyProfile(profileId, callback) {
+        root.runAction(["apply", profileId], (text, exitCode) => {
+            if (exitCode === 0) {
+                try {
+                    const parsed = JSON.parse(text);
+                    root.activeId = parsed.id ?? profileId;
+                } catch (error) {
+                    root.activeId = profileId;
+                }
+            }
+            if (callback) callback(text, exitCode);
+        });
+    }
+
+    function createProfile(name, callback) {
+        root.runAction(["create", name ?? "New mode"], (text, exitCode) => {
+            let created = null;
+            try { created = JSON.parse(text); } catch (error) { created = null; }
+            if (callback) callback(created, exitCode);
+        });
+    }
+
+    function updateProfile(profileId, patch, callback) {
+        root.runAction(["update", profileId, JSON.stringify(patch)], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
+    function deleteProfile(profileId, callback) {
+        root.runAction(["delete", profileId], (text, exitCode) => {
+            let remaining = null;
+            try { remaining = JSON.parse(text); } catch (error) { remaining = null; }
+            if (callback) callback(remaining, exitCode);
+        });
+    }
+
+    function setWallpaperForActive(imagePath, callback) {
+        root.runAction(["set-wallpaper", imagePath], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
+    Component.onCompleted: reload()
+
+    Process {
+        id: listProcess
+        running: false
+        command: ["python3", root.helperPath, "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const parsed = JSON.parse(text);
+                    // Set the active id first so the first profileListChanged
+                    // handler selects the active profile instead of the first.
+                    root.activeId = parsed.active ?? "";
+                    root.profileList = parsed.profiles ?? [];
+                } catch (error) {
+                    root.profileList = [];
+                    root.activeId = "";
+                }
+            }
+        }
+    }
+
+    Process {
+        id: actionProcess
+        running: false
+        property var currentCallback: null
+        command: ["python3", root.helperPath, "list"]
+        stdout: StdioCollector {
+            id: actionOutput
+        }
+        onExited: (exitCode, exitStatus) => {
+            const text = actionOutput.text;
+            const callback = actionProcess.currentCallback;
+            actionProcess.currentCallback = null;
+            if (callback) callback(text, exitCode);
+            root.reload();
+            if (root.pendingAction) {
+                const pending = root.pendingAction;
+                root.pendingAction = null;
+                root.runAction(pending.args, pending.callback);
+            }
+        }
+    }
+}

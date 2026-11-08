@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Open waypaper using the wallpaper folder of the active profile.
+# Open waypaper using the wallpaper folder of the active desktop profile.
 
 set -euo pipefail
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse"
 MODE_FILE="$STATE_DIR/mode"
+PROFILES_FILE="$HOME/.config/illogical-impulse/profiles.json"
 
 mode="weeb"
 if [[ -f "$MODE_FILE" ]]; then
     mode="$(<"$MODE_FILE")"
 fi
 
-case "$mode" in
-    weeb) folder="$HOME/Pictures/Wallpapers/weeb" ;;
-    *) folder="$HOME/Pictures/Wallpapers/sober" ;;
-esac
+folder=""
+if [[ -f "$PROFILES_FILE" ]]; then
+    folder="$(jq -r --arg id "$mode" '.profiles[$id].wallpaperFolder // empty' "$PROFILES_FILE")"
+fi
+
+if [[ -z "$folder" ]]; then
+    folder="$HOME/Pictures/Wallpapers/$mode"
+fi
 
 mkdir -p "$folder"
 
