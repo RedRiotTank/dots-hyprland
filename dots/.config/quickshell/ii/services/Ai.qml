@@ -28,8 +28,12 @@ Singleton {
 
     signal responseFinished()
 
+    readonly property string terminalSystemPrompt: "Eres un asistente de terminal Linux en CachyOS/Arch. Responde ÚNICAMENTE con el comando ejecutable de Bash/Zsh necesario para cumplir la petición del usuario. No añadas texto explicativo, ni introducciones, ni comentarios antes o después. Solo el comando limpio o el bloque de código."
+    property bool terminalMode: Persistent.states?.ai?.terminalMode ?? false
+
     property string systemPrompt: {
-        let prompt = Config.options?.ai?.systemPrompt ?? "";
+        let prompt = root.terminalMode ? root.terminalSystemPrompt : (Config.options?.ai?.systemPrompt ?? "");
+        if (root.terminalMode) return prompt;
         for (let key in root.promptSubstitutions) {
             // prompt = prompt.replaceAll(key, root.promptSubstitutions[key]);
             // QML/JS doesn't support replaceAll, so use split/join
@@ -517,6 +521,30 @@ Singleton {
         Config.options.ai.tool = tool;
         return true;
     }
+
+    function setTerminalMode(enabled: bool) {
+        root.terminalMode = enabled;
+        if (Persistent.states?.ai)
+            Persistent.states.ai.terminalMode = enabled;
+        root.addMessage(
+            Translation.tr("Terminal mode %1").arg(enabled ? Translation.tr("enabled") : Translation.tr("disabled")),
+            root.interfaceRole
+        );
+    }
+
+    function copyText(text: string) {
+        if (!text || text.length === 0) return;
+        Quickshell.execDetached(["wl-copy", "--", text]);
+    }
+
+    function runTerminalCommand(command: string) {
+        if (!command || command.trim().length === 0) return;
+        const terminal = Config.options.apps.terminal || "kitty -1";
+        Quickshell.execDetached([
+            "bash", "-c",
+            `${terminal} -e bash -lc '${CF.StringUtils.shellSingleQuoteEscape(command)}'`
+        ]);
+    }
     
     function getTemperature() {
         return root.temperature;
@@ -609,7 +637,10 @@ Singleton {
             const endpoint = root.currentApiStrategy.buildEndpoint(model);
             const messageArray = root.messageIDs.map(id => root.messageByID[id]);
             const filteredMessageArray = messageArray.filter(message => message.role !== Ai.interfaceRole);
-            const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, root.tools[model.api_format][root.currentTool], root.pendingFilePath);
+            const toolList = root.terminalMode
+                ? root.tools[model.api_format]["none"]
+                : root.tools[model.api_format][root.currentTool];
+            const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, toolList, root.pendingFilePath);
             // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
             let requestHeaders = {
@@ -624,6 +655,7 @@ Singleton {
                 "rawContent": "",
                 "thinking": true,
                 "done": false,
+                "terminalMode": root.terminalMode,
             });
             const id = idForMessage(requester.message);
             root.messageIDs = [...root.messageIDs, id];
@@ -850,6 +882,7 @@ Singleton {
                 "functionCall": message.functionCall,
                 "functionResponse": message.functionResponse,
                 "visibleToUser": message.visibleToUser,
+                "terminalMode": message.terminalMode,
             })
         })
     }
@@ -906,6 +939,7 @@ Singleton {
                     "functionCall": message.functionCall,
                     "functionResponse": message.functionResponse,
                     "visibleToUser": message.visibleToUser,
+                    "terminalMode": message.terminalMode ?? false,
                 });
             }
         } catch (e) {

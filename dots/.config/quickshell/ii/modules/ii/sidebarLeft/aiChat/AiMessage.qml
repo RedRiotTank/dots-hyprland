@@ -22,6 +22,36 @@ Rectangle {
 
     property list<var> messageBlocks: StringUtils.splitMarkdownBlocks(root.messageData?.content)
 
+    readonly property var firstCodeBlock: {
+        const blocks = StringUtils.splitMarkdownBlocks(root.messageData?.content ?? "");
+        return blocks.find(block => block.type === "code") ?? null;
+    }
+    readonly property var shellCodeBlock: {
+        const blocks = StringUtils.splitMarkdownBlocks(root.messageData?.content ?? "");
+        return blocks.find(block => {
+            if (block.type !== "code") return false;
+            const lang = String(block.lang ?? "").toLowerCase();
+            return ["bash", "sh", "zsh", "shell", "command", "console", ""].includes(lang);
+        }) ?? null;
+    }
+    readonly property bool isShellCodeBlock: root.shellCodeBlock !== null
+    readonly property string commandText: {
+        if (root.messageData?.terminalMode) {
+            if (root.firstCodeBlock) return String(root.firstCodeBlock.content ?? "").trim();
+            const blocks = StringUtils.splitMarkdownBlocks(root.messageData?.content ?? "");
+            return blocks
+                .filter(block => block.type === "text")
+                .map(block => block.content)
+                .join("\n")
+                .trim();
+        }
+        return root.shellCodeBlock ? String(root.shellCodeBlock.content ?? "").trim() : "";
+    }
+    readonly property bool canExecuteCommand: root.messageData?.terminalMode || root.isShellCodeBlock
+    readonly property bool showCommandActions: root.messageData?.role === 'assistant'
+        && root.commandText.length > 0
+        && (root.messageData?.terminalMode || root.isShellCodeBlock)
+
     anchors.left: parent?.left
     anchors.right: parent?.right
     implicitHeight: columnLayout.implicitHeight + root.messagePadding * 2
@@ -196,7 +226,7 @@ Rectangle {
                         buttonIcon: activated ? "inventory" : "content_copy"
 
                         onClicked: {
-                            Quickshell.clipboardText = root.messageData?.content
+                            Ai.copyText(root.messageData?.content)
                             copyButton.activated = true
                             copyIconTimer.restart()
                         }
@@ -319,6 +349,38 @@ Rectangle {
                         done: root.messageData?.done ?? false
                         forceDisableChunkSplitting: root.messageData?.content.includes("```") ?? true
                     } }
+                }
+            }
+        }
+
+        Flow { // Terminal command actions
+            visible: root.showCommandActions
+            spacing: 5
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignLeft
+
+            ButtonGroup {
+                GroupButton {
+                    contentItem: StyledText {
+                        text: Translation.tr("Copiar comando")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer2
+                    }
+                    onClicked: {
+                        Ai.copyText(root.commandText);
+                    }
+                }
+                GroupButton {
+                    visible: root.canExecuteCommand
+                    toggled: true
+                    contentItem: StyledText {
+                        text: Translation.tr("Ejecutar")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.m3colors.m3onPrimary
+                    }
+                    onClicked: {
+                        Ai.runTerminalCommand(root.commandText);
+                    }
                 }
             }
         }
