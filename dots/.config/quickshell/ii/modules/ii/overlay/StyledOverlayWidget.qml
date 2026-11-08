@@ -87,9 +87,25 @@ AbstractOverlayWidget {
     function restorePosition() {
         if (!root.persistentStateEntry) return;
         if (root.resizing) return;
-        root.x = Math.round(root.persistentStateEntry.x);
-        root.y = Math.round(root.persistentStateEntry.y);
+        // Re-establish the bindings instead of assigning only the current
+        // value. The old assignment happened while Persistent.states could
+        // still hold its defaults, which broke the binding and left pinned
+        // widgets at their default coordinates after a restart.
+        root.x = Qt.binding(() => Math.round(root.persistentStateEntry.x));
+        root.y = Qt.binding(() => Math.round(root.persistentStateEntry.y));
     }
+
+    // Widget coordinates are local to the overlay window. Remember which
+    // monitor that window belongs to so the same coordinates map to the same
+    // physical position on the next session.
+    function rememberScreen() {
+        const screenName = root.QsWindow.window?.screen?.name;
+        if (!screenName) return;
+        if (root.persistentStateEntry) root.persistentStateEntry.screenName = screenName;
+        if (!Persistent.states.overlay.screenName)
+            Persistent.states.overlay.screenName = screenName;
+    }
+
     onIdentifierChanged: restorePosition()
     onPersistentStateEntryChanged: restorePosition()
     drag {
@@ -118,6 +134,7 @@ AbstractOverlayWidget {
         restorePosition();
         reportPinnedState();
         reportClickableState();
+        root.rememberScreen();
     }
 
     Connections {
@@ -169,6 +186,7 @@ AbstractOverlayWidget {
             if (!active) {
                 root.resizing = false;
                 root.savePosition();
+                root.rememberScreen();
             }
         }
         xAxis.minimum: 0
@@ -183,6 +201,7 @@ AbstractOverlayWidget {
 
     function togglePinned() {
         persistentStateEntry.pinned = !persistentStateEntry.pinned;
+        if (persistentStateEntry.pinned) root.rememberScreen();
     }
 
     function toggleClickthrough() {

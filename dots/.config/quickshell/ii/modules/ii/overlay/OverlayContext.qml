@@ -24,10 +24,28 @@ Singleton {
         { identifier: "volumeMixer", materialSymbol: "volume_up" },
     ]
 
-    readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.some(identifier => {
+    readonly property bool hasPinnedWidgets: Persistent.states.overlay.open.some(identifier => {
+        const state = Persistent.states.overlay[identifier];
+        if (state?.pinned !== true) return false;
         const base = root.baseIdentifier(identifier);
         return root.availableWidgets.some(widget => widget.identifier === base);
     })
+
+    function widgetScreenName(identifier) {
+        const state = Persistent.states.overlay[identifier];
+        return state?.screenName || Persistent.states.overlay.screenName || "";
+    }
+
+    function hasPinnedWidgetsOnScreen(screenName) {
+        if (!screenName) return false;
+        return Persistent.states.overlay.open.some(identifier => {
+            const state = Persistent.states.overlay[identifier];
+            if (state?.pinned !== true) return false;
+            const base = root.baseIdentifier(identifier);
+            if (!root.availableWidgets.some(widget => widget.identifier === base)) return false;
+            return root.widgetScreenName(identifier) === screenName;
+        });
+    }
 
     property list<string> pinnedWidgetIdentifiers: []
     property list<var> clickableWidgets: []
@@ -53,7 +71,7 @@ Singleton {
         return Config.options.overlay.floatingImage.imageSource ?? "";
     }
 
-    function spawnFloatingImage(source = ""): string {
+    function spawnFloatingImage(source = "", screenName = ""): string {
         if (!root.floatingImagesEnabled) return "";
 
         for (let index = 1; index <= root.maxFloatingImages; ++index) {
@@ -64,6 +82,7 @@ Singleton {
             if (!state) continue;
 
             state.imageSource = source.length > 0 ? source : root.defaultFloatingImageSource();
+            if (screenName.length > 0) state.screenName = screenName;
             state.pinned = false;
             state.clickthrough = false;
 

@@ -15,9 +15,32 @@ Singleton {
     property string previousHyprlandInstanceSignature: ""
     property bool isNewHyprlandInstance: previousHyprlandInstanceSignature !== states.hyprlandInstanceSignature
 
+    readonly property list<string> overlayWidgetIdentifiers: [
+        "crosshair", "floatingImage", "floatingImage1", "floatingImage2",
+        "floatingImage3", "floatingImage4", "floatingImage5", "floatingImage6",
+        "floatingImage7", "floatingImage8", "floatingImage9", "floatingImage10",
+        "floatingImage11", "floatingImage12", "fpsLimiter", "recorder",
+        "resources", "volumeMixer", "notes"
+    ]
+
+    // Older state files didn't store the monitor of each overlay widget.
+    // Assign the legacy overlay screen so they have a stable monitor before
+    // the per-screen overlay windows are created.
+    function ensureWidgetScreens() {
+        const fallback = root.states.overlay.screenName || Quickshell.screens[0]?.name || "";
+        if (!root.states.overlay.screenName && fallback.length > 0)
+            root.states.overlay.screenName = fallback;
+        for (const identifier of root.overlayWidgetIdentifiers) {
+            const state = root.states.overlay[identifier];
+            if (state && !state.screenName && fallback.length > 0)
+                state.screenName = fallback;
+        }
+    }
+
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
+        root.ensureWidgetScreens()
     }
 
     Timer {
@@ -95,8 +118,12 @@ Singleton {
 
             property JsonObject overlay: JsonObject {
                 property list<string> open: ["crosshair", "recorder", "volumeMixer", "resources"]
+                // Monitor where pinned overlay widgets were last positioned.
+                // Keeping it makes their local coordinates stable across sessions.
+                property string screenName: ""
                 property JsonObject crosshair: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: true
                     property real x: 827
                     property real y: 441
@@ -105,6 +132,7 @@ Singleton {
                 }
                 property JsonObject floatingImage: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 1650
                     property real y: 390
@@ -115,6 +143,7 @@ Singleton {
                 // its own position, scale and image source.
                 property JsonObject floatingImage1: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 220
                     property real y: 220
@@ -125,6 +154,7 @@ Singleton {
                 }
                 property JsonObject floatingImage2: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 310
                     property real y: 220
@@ -135,6 +165,7 @@ Singleton {
                 }
                 property JsonObject floatingImage3: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 400
                     property real y: 220
@@ -145,6 +176,7 @@ Singleton {
                 }
                 property JsonObject floatingImage4: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 490
                     property real y: 220
@@ -155,6 +187,7 @@ Singleton {
                 }
                 property JsonObject floatingImage5: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 220
                     property real y: 310
@@ -165,6 +198,7 @@ Singleton {
                 }
                 property JsonObject floatingImage6: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 310
                     property real y: 310
@@ -175,6 +209,7 @@ Singleton {
                 }
                 property JsonObject floatingImage7: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 400
                     property real y: 310
@@ -185,6 +220,7 @@ Singleton {
                 }
                 property JsonObject floatingImage8: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 490
                     property real y: 310
@@ -195,6 +231,7 @@ Singleton {
                 }
                 property JsonObject floatingImage9: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 220
                     property real y: 400
@@ -205,6 +242,7 @@ Singleton {
                 }
                 property JsonObject floatingImage10: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 310
                     property real y: 400
@@ -215,6 +253,7 @@ Singleton {
                 }
                 property JsonObject floatingImage11: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 400
                     property real y: 400
@@ -225,6 +264,7 @@ Singleton {
                 }
                 property JsonObject floatingImage12: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 490
                     property real y: 400
@@ -235,6 +275,7 @@ Singleton {
                 }
                 property JsonObject fpsLimiter: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 1570
                     property real y: 615
@@ -243,6 +284,7 @@ Singleton {
                 }
                 property JsonObject recorder: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 80
                     property real y: 80
@@ -251,6 +293,7 @@ Singleton {
                 }
                 property JsonObject resources: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: true
                     property real x: 1500
                     property real y: 770
@@ -260,6 +303,7 @@ Singleton {
                 }
                 property JsonObject volumeMixer: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: false
                     property real x: 80
                     property real y: 280
@@ -269,6 +313,7 @@ Singleton {
                 }
                 property JsonObject notes: JsonObject {
                     property bool pinned: false
+                    property string screenName: ""
                     property bool clickthrough: true
                     property real x: 1400
                     property real y: 42

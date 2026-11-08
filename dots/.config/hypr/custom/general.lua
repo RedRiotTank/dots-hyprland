@@ -8,6 +8,15 @@ hl.config({
     }
 })
 
+-- The machine has two AMD GPUs. The hardware cursor plane occasionally renders
+-- as a black square when the cursor first enters the second monitor after
+-- login; let Hyprland draw the cursor in software instead.
+hl.config({
+    cursor = {
+        no_hardware_cursors = 1
+    }
+})
+
 -- MONITOR CONFIG
 
 -- AsRock Phantom Gaming 2K (center) at 165Hz - primary

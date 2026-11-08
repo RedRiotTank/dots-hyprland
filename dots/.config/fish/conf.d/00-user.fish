@@ -19,7 +19,10 @@ if status is-interactive
     end
 
     function fastfetch
-        if test (__ii_terminal_style) = pokemon
+        if not command -q fastfetch
+            return
+        end
+        if test (__ii_terminal_style) = pokemon; and command -q pokemon-colorscripts
             pokemon-colorscripts -r --no-title -s | command fastfetch --raw - --logo-width 40 --logo-padding-right 2 $argv
         else
             command fastfetch --logo CachyOS $argv

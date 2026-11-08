@@ -78,6 +78,7 @@ Item {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.NoButton
         enabled: resourceRowLayout.x >= 0 && root.width > 0 && root.visible
     }

@@ -16,61 +16,97 @@ Scope {
     property Component regionComponent: Component {
         Region {}
     }
-    
-    Loader {
-        id: overlayLoader
-        active: GlobalStates.overlayOpen || OverlayContext.hasPinnedWidgets
-        sourceComponent: PanelWindow {
-            id: overlayWindow
-            exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.namespace: "quickshell:overlay"
-            WlrLayershell.layer: WlrLayer.Overlay
-            // Use OnDemand for pinned widgets to allow focus switching with mouse clicks
-            WlrLayershell.keyboardFocus: GlobalStates.overlayOpen ? WlrKeyboardFocus.Exclusive : (OverlayContext.clickableWidgets.length > 0 ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
-            visible: true
-            color: "transparent"
 
-            mask: Region {
-                item: GlobalStates.overlayOpen ? overlayContent : null
-                regions: OverlayContext.clickableWidgets.map((widget) => regionComponent.createObject(this, {
-                    item: widget
-                }));
-            }
+    readonly property string focusedScreenName: Hyprland.focusedMonitor?.name
+        ?? (Quickshell.screens[0]?.name ?? "")
 
-            anchors {
-                top: true
-                bottom: true
-                left: true
-                right: true
-            }
+    // One overlay window per monitor. The interactive overlay opens on the
+    // focused monitor, while pinned widgets stay on the monitor where they
+    // were placed. This also lets each monitor keep its own widget layout.
+    Variants {
+        model: Quickshell.screens
 
-            HyprlandFocusGrab {
-                id: grab
-                windows: [overlayWindow]
-                active: false
-                onCleared: () => {
-                    if (!active) GlobalStates.overlayOpen = false;
+        LazyLoader {
+            id: scopedOverlay
+            required property var modelData
+
+            readonly property bool focused: modelData.name === root.focusedScreenName
+            readonly property bool interactive: GlobalStates.overlayOpen && focused
+            active: interactive || OverlayContext.hasPinnedWidgetsOnScreen(modelData.name)
+
+            component: PanelWindow {
+                id: overlayWindow
+                screen: scopedOverlay.modelData
+                exclusionMode: ExclusionMode.Ignore
+                WlrLayershell.namespace: "quickshell:overlay"
+                WlrLayershell.layer: WlrLayer.Overlay
+                // Use OnDemand for pinned widgets to allow focus switching with mouse clicks
+                WlrLayershell.keyboardFocus: scopedOverlay.interactive
+                    ? WlrKeyboardFocus.Exclusive
+                    : (OverlayContext.clickableWidgets.some(widget =>
+                        widget.QsWindow?.window?.screen?.name === scopedOverlay.modelData.name)
+                        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
+                visible: true
+                color: "transparent"
+
+                mask: Region {
+                    item: scopedOverlay.interactive ? overlayContent : null
+                    regions: OverlayContext.clickableWidgets
+                        .filter(widget => widget.QsWindow?.window?.screen?.name === scopedOverlay.modelData.name)
+                        .map(widget => root.regionComponent.createObject(this, {
+                            item: widget
+                        }))
                 }
-            }
 
-            Connections {
-                target: GlobalStates
-                function onOverlayOpenChanged() {
-                    delayedGrabTimer.restart();
+                anchors {
+                    top: true
+                    bottom: true
+                    left: true
+                    right: true
                 }
-            }
 
-            Timer {
-                id: delayedGrabTimer
-                interval: Appearance.animation.elementMoveFast.duration
-                onTriggered: {
-                    grab.active = GlobalStates.overlayOpen;
+                HyprlandFocusGrab {
+                    id: grab
+                    windows: [overlayWindow]
+                    active: false
+                    onCleared: () => {
+                        // Only dismiss the overlay when the grab was cleared by
+                        // clicking outside, not when we intentionally release
+                        // it because this monitor is no longer interactive.
+                        if (scopedOverlay.interactive && !grab.active)
+                            GlobalStates.overlayOpen = false;
+                    }
                 }
-            }
 
-            OverlayContent {
-                id: overlayContent
-                anchors.fill: parent
+                Connections {
+                    target: scopedOverlay
+                    function onInteractiveChanged() {
+                        if (scopedOverlay.interactive)
+                            delayedGrabTimer.restart();
+                        else
+                            grab.active = false;
+                    }
+                }
+
+                Timer {
+                    id: delayedGrabTimer
+                    interval: Appearance.animation.elementMoveFast.duration
+                    onTriggered: {
+                        grab.active = scopedOverlay.interactive;
+                    }
+                }
+
+                Component.onCompleted: {
+                    if (scopedOverlay.interactive)
+                        delayedGrabTimer.restart();
+                }
+
+                OverlayContent {
+                    id: overlayContent
+                    anchors.fill: parent
+                    screenName: scopedOverlay.modelData.name
+                    interactive: scopedOverlay.interactive
+                }
             }
         }
     }
@@ -82,7 +118,7 @@ Scope {
             GlobalStates.overlayOpen = !GlobalStates.overlayOpen;
         }
         function spawnFloatingImage(): void {
-            OverlayContext.spawnFloatingImage();
+            OverlayContext.spawnFloatingImage("", root.focusedScreenName);
         }
         function closeFloatingImages(): void {
             OverlayContext.closeAllFloatingImages();

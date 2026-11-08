@@ -136,6 +136,8 @@ Tips:
   - Some python package may need this to be built, e.g. #1235. This may varies on different distros though.
 - `uv`
   - Used for python venv.
+- `python`
+  - Used by the desktop profile helper, lyrics lookup, and recommendation launcher.
 - `gtk4`
   - Not explicitly used.
 - `libadwaita`
@@ -163,10 +165,16 @@ Tips:
 
 
 ## illogical-impulse-toolkit
+- `btop`
+  - Launched by the resource meters in the bar.
+- `libnotify`
+  - Provides `notify-send`, used across the shell.
 - `upower`
   - Used in Quickshell config.
 - `wtype`
   - Used in Hyprland `scripts/fuzzel-emoji.sh`
+- `xdg-utils`
+  - Provides `xdg-open`, used by the recommendation launcher.
 - `ydotool`
   - Used in Quickshell config.
 

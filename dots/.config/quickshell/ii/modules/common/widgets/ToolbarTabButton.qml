@@ -11,6 +11,7 @@ RippleButton {
     required property string materialSymbol
     required property bool current
     property string iconSource: ""
+    property bool coloredIcons: true
     horizontalPadding: 10
 
     implicitHeight: 40
@@ -32,6 +33,8 @@ RippleButton {
             width: visible ? 22 : 0
             height: 22
             source: root.iconSource
+            colorize: !root.coloredIcons
+            color: Appearance.colors.colOnLayer1
         }
         MaterialSymbol {
             id: icon
