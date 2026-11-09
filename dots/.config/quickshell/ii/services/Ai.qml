@@ -857,6 +857,7 @@ Singleton {
         message.functionPending = false; // User decided, no more "thinking"
 
         const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
+        responseMessage.thoughtSignature = message.thoughtSignature;
         const id = idForMessage(responseMessage);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = responseMessage;
@@ -911,6 +912,15 @@ Singleton {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
                 return;
             }
+            if (root.terminalAutoRun && !root.isUnsafeAutoCommand(args.command)) {
+                root.addMessage(
+                    Translation.tr("Running automatically:\n\n```bash\n%1\n```").arg(args.command),
+                    root.interfaceRole
+                );
+                message.functionPending = true;
+                root.approveCommand(message);
+                return;
+            }
             const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${args.command}\n\`\`\``;
             message.rawContent += contentToAppend;
             message.content += contentToAppend;
@@ -936,6 +946,7 @@ Singleton {
                 "functionName": message.functionName,
                 "functionCall": message.functionCall,
                 "functionResponse": message.functionResponse,
+                "thoughtSignature": message.thoughtSignature,
                 "visibleToUser": message.visibleToUser,
                 "terminalMode": message.terminalMode,
                 "terminalExecuted": message.terminalExecuted,
@@ -994,6 +1005,7 @@ Singleton {
                     "functionName": message.functionName,
                     "functionCall": message.functionCall,
                     "functionResponse": message.functionResponse,
+                    "thoughtSignature": message.thoughtSignature ?? "",
                     "visibleToUser": message.visibleToUser,
                     "terminalMode": message.terminalMode ?? false,
                     "terminalExecuted": message.terminalExecuted ?? false,

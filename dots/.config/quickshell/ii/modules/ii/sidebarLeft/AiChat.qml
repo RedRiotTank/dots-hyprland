@@ -810,7 +810,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                 RippleButton { // Terminal auto-run toggle
                     id: terminalAutoRunButton
-                    visible: Ai.terminalMode
+                    visible: true
                     toggled: Ai.terminalAutoRun
                     implicitWidth: terminalAutoRunRow.implicitWidth + 16
                     implicitHeight: 28
