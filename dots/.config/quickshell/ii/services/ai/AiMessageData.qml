@@ -22,4 +22,5 @@ QtObject {
     property bool functionPending: false
     property bool visibleToUser: true
     property bool terminalMode: false
+    property bool terminalExecuted: false
 }

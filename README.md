@@ -122,9 +122,11 @@ The same mode can be toggled with `/cmd`.
 
 - When enabled, the system prompt is replaced with a strict Linux command-only prompt for
   CachyOS/Arch, and tool calls are disabled.
-- Responses get **Copiar comando**, which copies the command with `wl-copy`, and **Ejecutar**,
-  which opens the command in the configured terminal.
-- The mode is persisted across sessions.
+- **Auto** is enabled by default: safe commands are executed automatically. Destructive commands
+  are not auto-run; their **Ejecutar** button remains available for manual confirmation.
+- Responses also get **Copiar comando**, which copies the command with `wl-copy`, and
+  **Ejecutar**, which opens the command in the configured terminal.
+- The mode and the auto-run setting are persisted across sessions.
 
 ### New Reddit tab
 

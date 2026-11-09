@@ -30,6 +30,7 @@ Singleton {
 
     readonly property string terminalSystemPrompt: "Eres un asistente de terminal Linux en CachyOS/Arch. Responde ÚNICAMENTE con el comando ejecutable de Bash/Zsh necesario para cumplir la petición del usuario. No añadas texto explicativo, ni introducciones, ni comentarios antes o después. Solo el comando limpio o el bloque de código."
     property bool terminalMode: Persistent.states?.ai?.terminalMode ?? false
+    property bool terminalAutoRun: Persistent.states?.ai?.terminalAutoRun ?? true
 
     property string systemPrompt: {
         let prompt = root.terminalMode ? root.terminalSystemPrompt : (Config.options?.ai?.systemPrompt ?? "");
@@ -532,6 +533,59 @@ Singleton {
         );
     }
 
+    function setTerminalAutoRun(enabled: bool) {
+        root.terminalAutoRun = enabled;
+        if (Persistent.states?.ai)
+            Persistent.states.ai.terminalAutoRun = enabled;
+        root.addMessage(
+            Translation.tr("Terminal auto-run %1").arg(enabled ? Translation.tr("enabled") : Translation.tr("disabled")),
+            root.interfaceRole
+        );
+    }
+
+    function extractTerminalCommand(content: string): string {
+        const blocks = CF.StringUtils.splitMarkdownBlocks(content || "");
+        const codeBlock = blocks.find(block => block.type === "code");
+        if (codeBlock)
+            return String(codeBlock.content || "").trim();
+        return blocks
+            .filter(block => block.type === "text")
+            .map(block => block.content)
+            .join("\n")
+            .trim();
+    }
+
+    function isUnsafeAutoCommand(command: string): bool {
+        if (command.length > 4000) return true;
+        return /(\brm\b|\brmdir\b|\bdd\b|\bmkfs|\bfdisk\b|\bparted\b|\bshutdown\b|\breboot\b|\bpoweroff\b|\bhalt\b|\bkill(all)?\b|\bpkill\b|\bchmod\b|\bchown\b|\bsudo\b|\bsu\b|\bsystemctl\s+(stop|disable|mask)\b|\bpacman\s+-R|\bflatpak\s+uninstall\b|\bsed\s+-i\b|\btruncate\b|>\s*\/|mkinitcpio|grub|bootctl|curl[^|]*\|\s*(ba)?sh|wget[^|]*\|\s*(ba)?sh)/i.test(command);
+    }
+
+    function executeTerminalCommand(command: string) {
+        if (!command || command.trim().length === 0) return;
+        Quickshell.execDetached(["bash", "-lc", command]);
+    }
+
+    function autoExecuteTerminalCommand(message: AiMessageData) {
+        if (!message?.terminalMode || !root.terminalAutoRun || message.terminalExecuted)
+            return;
+        const command = root.extractTerminalCommand(message.content);
+        if (command.length === 0)
+            return;
+        if (root.isUnsafeAutoCommand(command)) {
+            root.addMessage(
+                Translation.tr("Auto-run skipped for safety. Use Ejecutar if you want to run it:\n\n```bash\n%1\n```").arg(command),
+                root.interfaceRole
+            );
+            return;
+        }
+        message.terminalExecuted = true;
+        root.addMessage(
+            Translation.tr("Running automatically:\n\n```bash\n%1\n```").arg(command),
+            root.interfaceRole
+        );
+        root.executeTerminalCommand(command);
+    }
+
     function copyText(text: string) {
         if (!text || text.length === 0) return;
         Quickshell.execDetached(["wl-copy", "--", text]);
@@ -617,6 +671,7 @@ Singleton {
                 root.postResponseHook();
                 root.postResponseHook = null; // Reset hook after use
             }
+            root.autoExecuteTerminalCommand(requester.message);
             root.saveChat("lastSession")
             root.responseFinished()
         }
@@ -883,6 +938,7 @@ Singleton {
                 "functionResponse": message.functionResponse,
                 "visibleToUser": message.visibleToUser,
                 "terminalMode": message.terminalMode,
+                "terminalExecuted": message.terminalExecuted,
             })
         })
     }
@@ -940,6 +996,7 @@ Singleton {
                     "functionResponse": message.functionResponse,
                     "visibleToUser": message.visibleToUser,
                     "terminalMode": message.terminalMode ?? false,
+                    "terminalExecuted": message.terminalExecuted ?? false,
                 });
             }
         } catch (e) {

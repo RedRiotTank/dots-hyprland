@@ -374,7 +374,9 @@ Rectangle {
                     visible: root.canExecuteCommand
                     toggled: true
                     contentItem: StyledText {
-                        text: Translation.tr("Ejecutar")
+                        text: root.messageData?.terminalExecuted
+                            ? Translation.tr("Re-ejecutar")
+                            : Translation.tr("Ejecutar")
                         font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.m3colors.m3onPrimary
                     }
