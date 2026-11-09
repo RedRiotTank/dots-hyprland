@@ -122,7 +122,8 @@ The same mode can be toggled with `/cmd`.
 
 - When enabled, the system prompt is replaced with a strict Linux command-only prompt for
   CachyOS/Arch, and tool calls are disabled.
-- **Auto** is enabled by default: safe commands are executed automatically. Destructive commands
+- **Auto** is enabled by default: safe commands are executed automatically. This also covers
+  harmless `run_shell_command` calls made by the normal AI chat. Destructive commands
   are not auto-run; their **Ejecutar** button remains available for manual confirmation.
 - Responses also get **Copiar comando**, which copies the command with `wl-copy`, and
   **Ejecutar**, which opens the command in the configured terminal.
