@@ -808,6 +808,45 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                     }
                 }
 
+                RippleButton { // Terminal auto-run toggle
+                    id: terminalAutoRunButton
+                    visible: Ai.terminalMode
+                    toggled: Ai.terminalAutoRun
+                    implicitWidth: terminalAutoRunRow.implicitWidth + 16
+                    implicitHeight: 28
+                    buttonRadius: Appearance.rounding.verysmall
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colLayer2Active
+                    colRippleToggled: Appearance.colors.colSecondaryContainerActive
+                    downAction: () => Ai.setTerminalAutoRun(!Ai.terminalAutoRun)
+
+                    contentItem: RowLayout {
+                        id: terminalAutoRunRow
+                        anchors.centerIn: parent
+                        spacing: 5
+
+                        MaterialSymbol {
+                            text: "bolt"
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Ai.terminalAutoRun ? Appearance.m3colors.m3onSecondaryContainer : Appearance.m3colors.m3onSurface
+                        }
+                        StyledText {
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Ai.terminalAutoRun ? Appearance.m3colors.m3onSecondaryContainer : Appearance.m3colors.m3onSurface
+                            text: Translation.tr("Auto")
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Ai.terminalAutoRun
+                            ? Translation.tr("Auto-run enabled\nSafe commands are executed automatically")
+                            : Translation.tr("Enable auto-run\nCommands will only show the Ejecutar button")
+                    }
+                }
+
                 Item {
                     Layout.fillWidth: true
                 }
