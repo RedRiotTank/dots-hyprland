@@ -44,6 +44,7 @@ VESKTOP_BLOCK_END = "/* <<< illogical-impulse vesktop background <<< */"
 SPOTIFAST_DIR = HOME / "Pictures" / "spotifast"
 SPOTIFAST_APP_DIR = HOME / ".config" / "spotifast"
 SPOTIFAST_BACKGROUND_FILE = SPOTIFAST_APP_DIR / "background-image"
+NOTIFICATION_ART_DIR = HOME / "Pictures" / "notifications"
 
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
@@ -302,6 +303,43 @@ def remove_spotifast_images(profile_id: str) -> None:
         pass
 
 
+def resolve_notification_image(profile_id: str, current: str) -> str:
+    """Return the notification-panel art for a profile.
+
+    Images live in ~/Pictures/notifications as <profile-id>.<ext> or inside a
+    <profile-id>/ folder. The panel respects transparency, so GIFs and PNGs
+    work with or without a background.
+    """
+    if current:
+        candidate = Path(current).expanduser()
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_file() and NOTIFICATION_ART_DIR.resolve() in resolved.parents:
+                return str(resolved)
+        except OSError:
+            pass
+
+    try:
+        for entry in sorted(NOTIFICATION_ART_DIR.iterdir()):
+            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                return str(entry)
+    except OSError:
+        pass
+
+    files = image_files(NOTIFICATION_ART_DIR / profile_id)
+    return str(files[0]) if files else ""
+
+
+def remove_notification_images(profile_id: str) -> None:
+    """Remove the managed notification art for a deleted profile."""
+    try:
+        for entry in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
+            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                entry.unlink()
+    except OSError:
+        pass
+
+
 def slugify(name: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return value or "mode"
@@ -334,6 +372,7 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         wallpaper_interval = 0
     vesktop_enabled = bool(profile.get("vesktopBackgroundEnabled", True))
     spotifast_enabled = bool(profile.get("spotifastBackgroundEnabled", True))
+    notification_enabled = bool(profile.get("notificationImageEnabled", True))
     return {
         "id": profile_id,
         "name": profile.get("name") or profile_id,
@@ -353,6 +392,10 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         "spotifastBackground": resolve_spotifast_background(
             profile_id, profile.get("spotifastBackground") or ""
         ) if spotifast_enabled else "",
+        "notificationImageEnabled": notification_enabled,
+        "notificationImage": resolve_notification_image(
+            profile_id, profile.get("notificationImage") or ""
+        ) if notification_enabled else "",
         "tabs": normalize_tabs(profile.get("tabs")),
     }
 
@@ -560,6 +603,12 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
         )
     else:
         profile["spotifastBackground"] = ""
+    if profile.get("notificationImageEnabled", True):
+        profile["notificationImage"] = resolve_notification_image(
+            profile_id, profile.get("notificationImage") or ""
+        )
+    else:
+        profile["notificationImage"] = ""
     data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
     if data.get("active") == profile_id:
@@ -575,6 +624,7 @@ def delete_profile(data: dict, profile_id: str) -> dict:
         raise ValueError("At least one profile is required")
     remove_vesktop_images(profile_id)
     remove_spotifast_images(profile_id)
+    remove_notification_images(profile_id)
     del data["profiles"][profile_id]
     if data["active"] == profile_id:
         data["active"] = next(iter(data["profiles"]))
@@ -725,6 +775,48 @@ def clear_spotifast_background(data: dict, profile_id: str) -> dict:
     return profile
 
 
+def set_notification_image(data: dict, profile_id: str, image_path: str) -> dict:
+    """Copy an image/GIF into ~/Pictures/notifications for a profile."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    source = Path(image_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Image not found: {image_path}")
+    if source.suffix.lower() not in IMAGE_EXTENSIONS:
+        raise ValueError(f"Unsupported image format: {source.suffix}")
+
+    NOTIFICATION_ART_DIR.mkdir(parents=True, exist_ok=True)
+    target = NOTIFICATION_ART_DIR / f"{profile_id}{source.suffix.lower()}"
+    if source != target and not (target.exists() and same_file_content(source, target)):
+        shutil.copy2(source, target)
+
+    for old in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
+        try:
+            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
+                old.unlink()
+        except OSError:
+            pass
+
+    profile = data["profiles"][profile_id]
+    profile["notificationImageEnabled"] = True
+    profile["notificationImage"] = str(target)
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    return profile
+
+
+def clear_notification_image(data: dict, profile_id: str) -> dict:
+    """Hide the notification-panel art for a profile."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    profile = data["profiles"][profile_id]
+    profile["notificationImageEnabled"] = False
+    profile["notificationImage"] = ""
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    return profile
+
+
 def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
     """Switch the active profile to the next wallpaper in its folder.
 
@@ -794,6 +886,12 @@ def main() -> None:
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "clear-spotifast-background":
             profile = clear_spotifast_background(data, sys.argv[2])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "set-notification-image":
+            profile = set_notification_image(data, sys.argv[2], sys.argv[3])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "clear-notification-image":
+            profile = clear_notification_image(data, sys.argv[2])
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "rotate-wallpaper":
             profile = rotate_wallpaper(data, sys.argv[2] if len(sys.argv) > 2 else None)

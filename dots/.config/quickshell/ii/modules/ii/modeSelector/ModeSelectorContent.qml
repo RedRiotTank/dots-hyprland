@@ -183,6 +183,38 @@ Item {
         });
     }
 
+    function browseNotificationImage() {
+        pickNotificationImageProcess.running = true;
+    }
+
+    function setNotificationImage(path) {
+        if (!root.draft || path.length === 0) return;
+        root.busy = true;
+        ProfileManager.setNotificationImage(root.draft.id, path, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    notificationImage: updated.notificationImage,
+                    notificationImageEnabled: updated.notificationImageEnabled,
+                });
+            }
+        });
+    }
+
+    function clearNotificationImage() {
+        if (!root.draft) return;
+        root.busy = true;
+        ProfileManager.clearNotificationImage(root.draft.id, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    notificationImage: updated.notificationImage,
+                    notificationImageEnabled: updated.notificationImageEnabled,
+                });
+            }
+        });
+    }
+
     Connections {
         target: ProfileManager
         function onProfileListChanged() {
@@ -260,6 +292,18 @@ Item {
         }
     }
 
+    Process {
+        id: pickNotificationImageProcess
+        running: false
+        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/notifications"; kdialog --getopenfilename "$HOME/Pictures/notifications" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const path = text.trim();
+                if (path.length > 0) root.setNotificationImage(path);
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         color: "#00000077"
@@ -278,7 +322,7 @@ Item {
         anchors.centerIn: parent
         z: 1
         implicitWidth: Math.min(parent.width - 80, 1240)
-        implicitHeight: Math.min(parent.height - 80, 860)
+        implicitHeight: Math.min(parent.height - 80, 900)
         radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         color: Appearance.colors.colLayer0
         border.width: 1
@@ -484,11 +528,11 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 8
+                    spacing: 6
 
                     ModePreview {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 190
+                        Layout.preferredHeight: 160
                         profile: root.draft
                     }
 
@@ -633,6 +677,46 @@ Item {
 
                             StyledToolTip {
                                 text: Translation.tr("Disable the Spotifast background for this mode")
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        StyledText {
+                            Layout.preferredWidth: 120
+                            text: Translation.tr("Notifications")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            elide: Text.ElideRight
+                        }
+                        ToolbarTextField {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            Layout.fillHeight: false
+                            readOnly: true
+                            text: root.draft?.notificationImage ?? ""
+                            placeholderText: Translation.tr("~/Pictures/notifications/<profile>.gif")
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "image"
+                            onClicked: root.browseNotificationImage()
+
+                            StyledToolTip {
+                                text: Translation.tr("Choose the art for the notification panel.\nThe image is copied to ~/Pictures/notifications.")
+                            }
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "delete"
+                            enabled: (root.draft?.notificationImage ?? "").length > 0
+                            onClicked: root.clearNotificationImage()
+
+                            StyledToolTip {
+                                text: Translation.tr("Disable the notification panel art for this mode")
                             }
                         }
                     }
