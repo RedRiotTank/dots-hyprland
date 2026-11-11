@@ -8,15 +8,18 @@ setting, weeb policy and sidebar tab visibility.
 
 from __future__ import annotations
 
+import base64
 import configparser
 import filecmp
 import json
+import mimetypes
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 HOME = Path.home()
@@ -29,6 +32,15 @@ WAYPAPER_CONFIG = HOME / ".config" / "waypaper" / "config.ini"
 SWITCHWALL = HOME / ".config" / "quickshell" / "ii" / "scripts" / "colors" / "switchwall.sh"
 DEFAULT_WALLPAPER_DIR = HOME / "Pictures" / "Wallpapers"
 FALLBACK_WALLPAPER = HOME / ".config" / "quickshell" / "ii" / "assets" / "images" / "default_wallpaper.png"
+VESKTOP_DIR = HOME / "Pictures" / "vesktop"
+VESKTOP_APP_DIR = HOME / ".config" / "vesktop"
+VESKTOP_SETTINGS_DIR = VESKTOP_APP_DIR / "settings"
+VESKTOP_QUICK_CSS = VESKTOP_SETTINGS_DIR / "quickCss.css"
+VESKTOP_SETTINGS_FILE = VESKTOP_SETTINGS_DIR / "settings.json"
+VESKTOP_THEMES_DIR = VESKTOP_APP_DIR / "themes"
+VESKTOP_THEME_LINK = VESKTOP_THEMES_DIR / "ii-vesktop-backgrounds"
+VESKTOP_BLOCK_START = "/* >>> illogical-impulse vesktop background >>> */"
+VESKTOP_BLOCK_END = "/* <<< illogical-impulse vesktop background <<< */"
 
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
@@ -88,6 +100,152 @@ def resolve_wallpaper(folder: str, wallpaper: str) -> str:
     return ""
 
 
+def resolve_vesktop_background(profile_id: str, current: str) -> str:
+    """Return the image for a profile inside ~/Pictures/vesktop.
+
+    A profile may use either a flat file (<profile-id>.<ext>) or a folder
+    (<profile-id>/<image>). Paths outside that folder are ignored so the
+    repository and profiles.json never depend on arbitrary locations.
+    """
+    if current:
+        candidate = Path(current).expanduser()
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_file() and VESKTOP_DIR.resolve() in resolved.parents:
+                return str(resolved)
+        except OSError:
+            pass
+
+    try:
+        for entry in sorted(VESKTOP_DIR.iterdir()):
+            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                return str(entry)
+    except OSError:
+        pass
+
+    files = image_files(VESKTOP_DIR / profile_id)
+    return str(files[0]) if files else ""
+
+
+def ensure_vesktop_theme_link() -> bool:
+    """Expose ~/Pictures/vesktop to Vencord's vencord:// theme protocol."""
+    try:
+        VESKTOP_THEMES_DIR.mkdir(parents=True, exist_ok=True)
+        target = VESKTOP_DIR.resolve()
+        if VESKTOP_THEME_LINK.is_symlink():
+            if VESKTOP_THEME_LINK.resolve() == target:
+                return True
+            VESKTOP_THEME_LINK.unlink()
+        elif VESKTOP_THEME_LINK.exists():
+            return False
+        VESKTOP_THEME_LINK.symlink_to(target, target_is_directory=True)
+        return True
+    except OSError:
+        return False
+
+
+def vesktop_image_url(image: str) -> str:
+    """Build a URL that Vencord can load from its theme protocol.
+
+    Electron blocks plain file:// images from the Discord origin. Vencord
+    serves files under ~/.config/vesktop/themes through vencord://, so the
+    Pictures folder is exposed with a symlink. Data URLs are a fallback for
+    filesystems where symlinks are unavailable.
+    """
+    path = Path(image)
+    try:
+        relative = path.resolve().relative_to(VESKTOP_DIR.resolve()).as_posix()
+    except (OSError, ValueError):
+        relative = path.name
+
+    if ensure_vesktop_theme_link():
+        return "vencord:///themes/ii-vesktop-backgrounds/" + urllib.parse.quote(relative)
+
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+def strip_vesktop_block(content: str) -> str:
+    pattern = re.compile(
+        re.escape(VESKTOP_BLOCK_START) + r".*?" + re.escape(VESKTOP_BLOCK_END) + r"\n?",
+        re.DOTALL,
+    )
+    return pattern.sub("", content)
+
+
+def ensure_vesktop_quickcss_enabled() -> None:
+    """Vencord must have QuickCSS enabled for the managed block to load."""
+    if not VESKTOP_SETTINGS_FILE.is_file():
+        return
+    try:
+        data = json.loads(VESKTOP_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict) or data.get("useQuickCss") is True:
+        return
+    data["useQuickCss"] = True
+    save_json(VESKTOP_SETTINGS_FILE, data)
+
+
+def update_vesktop(profile: dict) -> None:
+    """Write or remove the managed QuickCSS block for a profile.
+
+    Only the block between the markers is touched, so user CSS and themes are
+    preserved. Vencord watches quickCss.css and applies the change live.
+    """
+    if not VESKTOP_APP_DIR.is_dir():
+        return
+
+    image = ""
+    if profile.get("vesktopBackgroundEnabled", True):
+        image = resolve_vesktop_background(profile.get("id", ""), profile.get("vesktopBackground") or "")
+    if not image and not VESKTOP_QUICK_CSS.exists():
+        return
+
+    content = ""
+    if VESKTOP_QUICK_CSS.is_file():
+        try:
+            content = VESKTOP_QUICK_CSS.read_text(encoding="utf-8")
+        except OSError:
+            content = ""
+    content = strip_vesktop_block(content)
+
+    if image:
+        url = vesktop_image_url(image)
+        block = "\n".join([
+            VESKTOP_BLOCK_START,
+            "/* Managed by illogical-impulse desktop modes. Do not edit inside the markers. */",
+            ":root {",
+            f'    --ii-vesktop-background: url("{url}");',
+            "}",
+            "#app-mount {",
+            "    background:",
+            "        linear-gradient(rgba(15, 16, 20, 0.45), rgba(15, 16, 20, 0.45)),",
+            "        var(--ii-vesktop-background) center / cover no-repeat fixed !important;",
+            "}",
+            "#app-mount * {",
+            "    background-color: transparent !important;",
+            "}",
+            '#app-mount [role="menu"],',
+            '#app-mount [role="dialog"],',
+            '#app-mount [role="listbox"] {',
+            "    background-color: rgba(20, 21, 24, 0.92) !important;",
+            "}",
+            VESKTOP_BLOCK_END,
+        ])
+        content = content.rstrip() + ("\n\n" if content.strip() else "") + block + "\n"
+    else:
+        content = content.rstrip() + ("\n" if content.strip() else "")
+
+    ensure_vesktop_quickcss_enabled()
+    try:
+        VESKTOP_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+        VESKTOP_QUICK_CSS.write_text(content, encoding="utf-8")
+    except OSError:
+        pass
+
+
 def slugify(name: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return value or "mode"
@@ -118,6 +276,7 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         wallpaper_interval = max(0, int(profile.get("wallpaperInterval", 0) or 0))
     except (TypeError, ValueError):
         wallpaper_interval = 0
+    vesktop_enabled = bool(profile.get("vesktopBackgroundEnabled", True))
     return {
         "id": profile_id,
         "name": profile.get("name") or profile_id,
@@ -129,6 +288,10 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         "weebPolicy": bool(profile.get("weebPolicy", False)),
         "coloredIcons": bool(profile.get("coloredIcons", profile_id != "sober")),
         "terminal": profile.get("terminal", "cachyos"),
+        "vesktopBackgroundEnabled": vesktop_enabled,
+        "vesktopBackground": resolve_vesktop_background(
+            profile_id, profile.get("vesktopBackground") or ""
+        ) if vesktop_enabled else "",
         "tabs": normalize_tabs(profile.get("tabs")),
     }
 
@@ -256,6 +419,7 @@ def apply_profile(data: dict, profile_id: str, run_switchwall: bool = True) -> d
     update_config(profile)
     update_waypaper(profile)
     write_runtime_state(profile)
+    update_vesktop(profile)
     wallpaper = profile.get("wallpaper", "")
     if run_switchwall and wallpaper and Path(wallpaper).is_file() and SWITCHWALL.is_file():
         subprocess.run(
@@ -322,8 +486,16 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
         profile.get("wallpaperFolder", ""), profile.get("wallpaper", "")
     )
     profile["preview"] = profile.get("wallpaper", "")
+    if profile.get("vesktopBackgroundEnabled", True):
+        profile["vesktopBackground"] = resolve_vesktop_background(
+            profile_id, profile.get("vesktopBackground") or ""
+        )
+    else:
+        profile["vesktopBackground"] = ""
     data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
+    if data.get("active") == profile_id:
+        update_vesktop(profile)
     return profile
 
 
@@ -339,6 +511,7 @@ def delete_profile(data: dict, profile_id: str) -> dict:
         update_config(profile)
         update_waypaper(profile)
         write_runtime_state(profile)
+        update_vesktop(profile)
     save_json(PROFILES_FILE, data)
     return data["profiles"][data["active"]]
 
@@ -373,6 +546,54 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     save_json(PROFILES_FILE, data)
     update_waypaper(profile)
     (STATE_DIR / f"wallpaper-{profile['id']}").write_text(str(target) + "\n", encoding="utf-8")
+    return profile
+
+
+def set_vesktop_background(data: dict, profile_id: str, image_path: str) -> dict:
+    """Copy an image into ~/Pictures/vesktop and assign it to a profile."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    source = Path(image_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Image not found: {image_path}")
+    if source.suffix.lower() not in IMAGE_EXTENSIONS:
+        raise ValueError(f"Unsupported image format: {source.suffix}")
+
+    VESKTOP_DIR.mkdir(parents=True, exist_ok=True)
+    target = VESKTOP_DIR / f"{profile_id}{source.suffix.lower()}"
+    if source != target and not (target.exists() and same_file_content(source, target)):
+        shutil.copy2(source, target)
+
+    # Keep one canonical image per profile and remove older copies with a
+    # different extension. Files that do not match the profile id are untouched.
+    for old in VESKTOP_DIR.glob(f"{profile_id}.*"):
+        try:
+            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
+                old.unlink()
+        except OSError:
+            pass
+
+    profile = data["profiles"][profile_id]
+    profile["vesktopBackgroundEnabled"] = True
+    profile["vesktopBackground"] = str(target)
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    if data.get("active") == profile_id:
+        update_vesktop(profile)
+    return profile
+
+
+def clear_vesktop_background(data: dict, profile_id: str) -> dict:
+    """Disable the Vesktop background for a profile without deleting its image."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    profile = data["profiles"][profile_id]
+    profile["vesktopBackgroundEnabled"] = False
+    profile["vesktopBackground"] = ""
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    if data.get("active") == profile_id:
+        update_vesktop(profile)
     return profile
 
 
@@ -433,6 +654,12 @@ def main() -> None:
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "set-wallpaper":
             profile = set_wallpaper(data, sys.argv[2])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "set-vesktop-background":
+            profile = set_vesktop_background(data, sys.argv[2], sys.argv[3])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "clear-vesktop-background":
+            profile = clear_vesktop_background(data, sys.argv[2])
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "rotate-wallpaper":
             profile = rotate_wallpaper(data, sys.argv[2] if len(sys.argv) > 2 else None)
