@@ -212,6 +212,24 @@ Singleton {
         });
     }
 
+    function setNotificationImage(profileId, imagePath, callback) {
+        root.runAction(["set-notification-image", profileId, imagePath], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
+    function clearNotificationImage(profileId, callback) {
+        root.runAction(["clear-notification-image", profileId], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
     Component.onCompleted: reload()
 
     Process {
