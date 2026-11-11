@@ -1,3 +1,5 @@
+# Shared defaults installed by the fork. Put machine-specific or personal
+# overrides in ~/.config/uwsm/env.local, which the installer leaves untouched.
 export BROWSER=firefox
 export TERM=xterm-kitty
 export QT_QPA_PLATFORM="wayland;xcb"
