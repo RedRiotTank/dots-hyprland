@@ -295,7 +295,7 @@ Item {
     Process {
         id: pickNotificationImageProcess
         running: false
-        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/notifications"; kdialog --getopenfilename "$HOME/Pictures/notifications" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/notifications"; kdialog --getopenfilename "$HOME/Pictures/notifications" "Media (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp *.mp4 *.webm *.mov *.mkv *.m4v)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
@@ -707,6 +707,18 @@ Item {
 
                             StyledToolTip {
                                 text: Translation.tr("Choose the art for the notification panel.\nThe image is copied to ~/Pictures/notifications.")
+                            }
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "filter_alt"
+                            toggled: root.draft?.notificationChromaKey !== false
+                            onClicked: root.updateDraft({
+                                notificationChromaKey: !(root.draft?.notificationChromaKey !== false)
+                            })
+
+                            StyledToolTip {
+                                text: Translation.tr("Remove the green background from videos")
                             }
                         }
                         IconToolbarButton {
