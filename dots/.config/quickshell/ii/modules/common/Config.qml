@@ -278,8 +278,8 @@ Singleton {
                 }
                 property JsonObject weather: JsonObject {
                     property bool enable: false
-                    property bool enableGPS: false // gps based location
-                    property string city: "Maracena" // When 'enableGPS' is false
+                    property bool enableGPS: true // gps based location
+                    property string city: "" // When 'enableGPS' is false
                     property real latitude: 0 // Used when set by the city search
                     property real longitude: 0
                     property bool useUSCS: false // Instead of metric (SI) units

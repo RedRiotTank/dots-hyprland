@@ -28,4 +28,29 @@ if ! command -v waypaper >/dev/null 2>&1; then
     exit 1
 fi
 
-exec waypaper --folder "$folder" --config-file "$HOME/.config/waypaper/config.ini"
+CONFIG_FILE="$HOME/.config/waypaper/config.ini"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    # Generate a user-specific config instead of shipping one with absolute
+    # paths. The profile helper rewrites these values when a mode is applied.
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    cat > "$CONFIG_FILE" <<EOF
+[Settings]
+language = en
+backend = none
+folder = $folder
+wallpaper =
+show_path_in_tooltip = True
+fill = fill
+sort = name
+color = #ffffff
+subfolders = False
+all_subfolders = False
+show_hidden = False
+show_gifs_only = False
+zen_mode = False
+post_command = $HOME/.config/quickshell/ii/scripts/colors/switchwall.sh --image "\$wallpaper"
+number_of_columns = 3
+EOF
+fi
+
+exec waypaper --folder "$folder" --config-file "$CONFIG_FILE"

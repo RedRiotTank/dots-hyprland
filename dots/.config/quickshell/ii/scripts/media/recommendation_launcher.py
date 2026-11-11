@@ -21,6 +21,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 )
 LOG_FILE = Path.home() / ".cache" / "quickshell" / "recommendation_launcher.log"
+LOG_MAX_BYTES = 512 * 1024
 TOKEN_FILE = Path.home() / ".config" / "illogical-impulse" / "spotify_token.json"
 PLAYBACK_STATE_FILE = Path.home() / ".cache" / "quickshell" / "spotify_playback_state.json"
 BROWSER_CLASS_REGEX = (
@@ -59,6 +60,12 @@ def load_session_credentials() -> None:
 def log(message: str) -> None:
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            # Keep the troubleshooting log bounded so it cannot grow forever.
+            if LOG_FILE.stat().st_size > LOG_MAX_BYTES:
+                LOG_FILE.replace(LOG_FILE.with_name(LOG_FILE.name + ".1"))
+        except OSError:
+            pass
         with LOG_FILE.open("a", encoding="utf-8") as handle:
             handle.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
     except Exception:

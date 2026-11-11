@@ -7,6 +7,10 @@ __pycache__/
 
 /dots/.config/quickshell/ii/.qmlls.ini
 
+# User-specific generated configuration
+/dots/.config/waypaper/config.ini
+/dots/.config/uwsm/env.local
+
 # exp-update
 /.update-lock
 

@@ -9,6 +9,7 @@ setting, weeb policy and sidebar tab visibility.
 from __future__ import annotations
 
 import configparser
+import filecmp
 import json
 import os
 import re
@@ -59,6 +60,16 @@ def image_files(folder: Path) -> list[Path]:
         )
     except OSError:
         return []
+
+
+def same_file_content(left: Path, right: Path) -> bool:
+    """Return True when both paths contain the same data."""
+    try:
+        if left.stat().st_size != right.stat().st_size:
+            return False
+        return filecmp.cmp(left, right, shallow=False)
+    except OSError:
+        return False
 
 
 def resolve_wallpaper(folder: str, wallpaper: str) -> str:
@@ -137,8 +148,8 @@ def default_profiles() -> dict:
 
     weeb_folder = DEFAULT_WALLPAPER_DIR / "weeb"
     sober_folder = DEFAULT_WALLPAPER_DIR / "sober"
-    weeb_wallpaper = str(weeb_folder / "Makima.jpg") if (weeb_folder / "Makima.jpg").exists() else current_wallpaper
-    sober_wallpaper = str(sober_folder / "highlands-grid.jpg") if (sober_folder / "highlands-grid.jpg").exists() else current_wallpaper
+    weeb_wallpaper = resolve_wallpaper(str(weeb_folder), "") or current_wallpaper
+    sober_wallpaper = resolve_wallpaper(str(sober_folder), "") or current_wallpaper
 
     profiles = {
         "weeb": normalize_profile("weeb", {
@@ -348,7 +359,9 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     else:
         target = folder / source.name
         index = 2
-        while target.exists() and target.resolve() != source.resolve():
+        # Reuse an identical file instead of creating a new copy every time
+        # the same wallpaper is selected from another folder.
+        while target.exists() and not same_file_content(source, target):
             target = folder / f"{source.stem}-{index}{source.suffix}"
             index += 1
         if not target.exists():
