@@ -588,7 +588,8 @@ Singleton {
 
     function copyText(text: string) {
         if (!text || text.length === 0) return;
-        Quickshell.execDetached(["wl-copy", "--", text]);
+        // Use the shell's native clipboard instead of spawning wl-copy.
+        Quickshell.clipboardText = text;
     }
 
     function runTerminalCommand(command: string) {

@@ -135,7 +135,7 @@ The same mode can be toggled with `/cmd`.
 - **Auto** is enabled by default: safe commands are executed automatically. This also covers
   harmless `run_shell_command` calls made by the normal AI chat. Destructive commands
   are not auto-run; their **Ejecutar** button remains available for manual confirmation.
-- Responses also get **Copiar comando**, which copies the command with `wl-copy`, and
+- Responses also get **Copiar comando**, which copies the command to the clipboard, and
   **Ejecutar**, which opens the command in the configured terminal.
 - The mode and the auto-run setting are persisted across sessions.
 
@@ -251,7 +251,6 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 - `kdialog` — file/folder pickers.
 - `btop` — resource meter action in the bar.
 - `xdg-utils` — opening recommendations in the active platform.
-- `wl-clipboard` — `wl-copy` for copied commands and code blocks.
 - `libnotify` — desktop notifications.
 
 ### Optional
