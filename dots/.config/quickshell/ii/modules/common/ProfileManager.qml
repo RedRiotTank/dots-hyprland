@@ -176,6 +176,24 @@ Singleton {
         });
     }
 
+    function setVesktopBackground(profileId, imagePath, callback) {
+        root.runAction(["set-vesktop-background", profileId, imagePath], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
+    function clearVesktopBackground(profileId, callback) {
+        root.runAction(["clear-vesktop-background", profileId], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
     Component.onCompleted: reload()
 
     Process {

@@ -125,6 +125,21 @@ Recommendations open on the platform that is currently playing:
 | Spotify | Resolves the exact track and starts it through MPRIS. A temporary Hyprland `no_focus` rule keeps Spotify from raising its window, so focus and workspace do not move. Spotify API credentials are required for exact matching. |
 | Unknown player | Falls back to a YouTube search. |
 
+### Vesktop background per desktop mode
+
+Each desktop mode can have its own **Vesktop** (Discord) background:
+
+- images live in `~/Pictures/vesktop`, either as `<profile-id>.<ext>` or inside a
+  `<profile-id>/` folder;
+- the image can be chosen or disabled from the Desktop modes panel (`Super + Shift + W`);
+- applying a mode writes a managed block to Vesktop's QuickCSS file and keeps any CSS
+  outside the markers untouched;
+- Vencord watches that file, so an already open Vesktop switches to the new image live;
+- if Vesktop is installed but QuickCSS is disabled, the helper enables it once.
+
+Vesktop itself remains optional. Profiles without an image simply leave Vesktop's normal
+appearance unchanged.
+
 ### New Reddit tab
 
 - A dedicated **Reddit** sidebar tab with the Reddit logo and branding.
@@ -243,6 +258,8 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 
 - `waypaper` — optional wallpaper picker bound to `Super + Alt + W`.
 - `pokemon-colorscripts-git` — optional Pokemon terminal greeting.
+- Vesktop with Vencord QuickCSS — optional per-mode Discord background stored in
+  `~/Pictures/vesktop`.
 - A local Spotify client, plus Spotify API credentials if you want exact Spotify track
   recommendations.
 
@@ -318,6 +335,8 @@ cp dots/.config/fish/conf.d/00-user.fish ~/.config/fish/conf.d/00-user.fish
   ```bash
   mkdir -p ~/Pictures/Wallpapers/weeb ~/Pictures/Wallpapers/sober
   ```
+- Optional: create `~/Pictures/vesktop` and add one image per profile for Vesktop backgrounds.
+  You can also choose the image from the Desktop modes panel.
 - Open **Desktop modes** with `Super + Shift + W` to create or edit profiles.
 - If `waypaper` is not installed, the `Super + Alt + W` shortcut displays a notification
   instead of opening a picker. The built-in wallpaper selector still works.
@@ -493,6 +512,19 @@ file from:
 ```text
 ~/.cache/quickshell/media/coverart/
 ```
+
+### Vesktop background does not change when switching modes
+
+Check that the profile has an image in `~/Pictures/vesktop` (or choose one from Desktop
+modes). The helper writes a managed block to:
+
+```text
+~/.config/vesktop/settings/quickCss.css
+```
+
+Keep your own CSS outside the `illogical-impulse vesktop background` markers. If Vesktop was
+running when QuickCSS was first enabled, restart it once; later profile changes are applied
+live. A profile with the background disabled removes only the managed block.
 
 ### Recommendations do not open the right application
 
