@@ -119,6 +119,38 @@ Item {
         pickImageProcess.running = true;
     }
 
+    function browseVesktopImage() {
+        pickVesktopImageProcess.running = true;
+    }
+
+    function setVesktopBackground(path) {
+        if (!root.draft || path.length === 0) return;
+        root.busy = true;
+        ProfileManager.setVesktopBackground(root.draft.id, path, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    vesktopBackground: updated.vesktopBackground,
+                    vesktopBackgroundEnabled: updated.vesktopBackgroundEnabled,
+                });
+            }
+        });
+    }
+
+    function clearVesktopBackground() {
+        if (!root.draft) return;
+        root.busy = true;
+        ProfileManager.clearVesktopBackground(root.draft.id, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    vesktopBackground: updated.vesktopBackground,
+                    vesktopBackgroundEnabled: updated.vesktopBackgroundEnabled,
+                });
+            }
+        });
+    }
+
     Connections {
         target: ProfileManager
         function onProfileListChanged() {
@@ -168,6 +200,18 @@ Item {
             onStreamFinished: {
                 const path = text.trim();
                 if (path.length > 0) root.updateDraft({ wallpaper: path });
+            }
+        }
+    }
+
+    Process {
+        id: pickVesktopImageProcess
+        running: false
+        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/vesktop"; kdialog --getopenfilename "$HOME/Pictures/vesktop" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const path = text.trim();
+                if (path.length > 0) root.setVesktopBackground(path);
             }
         }
     }
@@ -466,6 +510,46 @@ Item {
                             implicitHeight: 36
                             text: "image"
                             onClicked: root.browseImage()
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        StyledText {
+                            Layout.preferredWidth: 120
+                            text: Translation.tr("Vesktop")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            elide: Text.ElideRight
+                        }
+                        ToolbarTextField {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            Layout.fillHeight: false
+                            readOnly: true
+                            text: root.draft?.vesktopBackground ?? ""
+                            placeholderText: Translation.tr("~/Pictures/vesktop/<profile>.jpg")
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "image"
+                            onClicked: root.browseVesktopImage()
+
+                            StyledToolTip {
+                                text: Translation.tr("Choose the Vesktop background for this mode.\nThe image is copied to ~/Pictures/vesktop.")
+                            }
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "delete"
+                            enabled: (root.draft?.vesktopBackground ?? "").length > 0
+                            onClicked: root.clearVesktopBackground()
+
+                            StyledToolTip {
+                                text: Translation.tr("Disable the Vesktop background for this mode")
+                            }
                         }
                     }
 
