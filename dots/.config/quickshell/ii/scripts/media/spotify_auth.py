@@ -115,7 +115,7 @@ def exchange_code(code: str) -> dict:
 def main() -> None:
     load_session_credentials()
     if not CLIENT_ID or not CLIENT_SECRET:
-        print("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in ~/.config/uwsm/env first.")
+        print("Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in ~/.config/uwsm/env.local first.")
         sys.exit(1)
 
     authorize_url = "https://accounts.spotify.com/authorize?" + urllib.parse.urlencode({
