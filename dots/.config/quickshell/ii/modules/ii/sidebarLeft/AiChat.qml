@@ -74,13 +74,6 @@ Item {
             }
         },
         {
-            name: "cmd",
-            description: Translation.tr("Toggle terminal command mode."),
-            execute: () => {
-                Ai.setTerminalMode(!Ai.terminalMode);
-            }
-        },
-        {
             name: "prompt",
             description: Translation.tr("Set the system prompt for the model."),
             execute: args => {
@@ -524,9 +517,7 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
                         wrapMode: TextArea.Wrap
                         padding: 10
                         color: activeFocus ? Appearance.m3colors.m3onSurface : Appearance.m3colors.m3onSurfaceVariant
-                        placeholderText: Ai.terminalMode
-                            ? Translation.tr("Describe the command you need...")
-                            : Translation.tr('Message the model... "%1" for commands').arg(root.commandPrefix)
+                        placeholderText: Translation.tr('Message the model... "%1" for commands').arg(root.commandPrefix)
 
                         background: null
 
@@ -764,87 +755,9 @@ Inline w/ backslash and round brackets \\(e^{i\\pi} + 1 = 0\\)
 
                 ApiInputBoxIndicator {
                     // Tool indicator
-                    visible: !Ai.terminalMode
                     icon: "service_toolbox"
                     text: Ai.currentTool.charAt(0).toUpperCase() + Ai.currentTool.slice(1)
                     tooltipText: Translation.tr("Current tool: %1\nSet it with %2tool TOOL").arg(Ai.currentTool).arg(root.commandPrefix)
-                }
-
-                RippleButton { // Terminal mode toggle
-                    id: terminalModeButton
-                    toggled: Ai.terminalMode
-                    implicitWidth: terminalModeRow.implicitWidth + 16
-                    implicitHeight: 28
-                    buttonRadius: Appearance.rounding.verysmall
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colBackgroundToggled: Appearance.colors.colPrimary
-                    colBackgroundToggledHover: Appearance.colors.colPrimaryHover
-                    colRipple: Appearance.colors.colLayer2Active
-                    colRippleToggled: Appearance.colors.colPrimaryActive
-                    downAction: () => Ai.setTerminalMode(!Ai.terminalMode)
-
-                    contentItem: RowLayout {
-                        id: terminalModeRow
-                        anchors.centerIn: parent
-                        spacing: 5
-
-                        MaterialSymbol {
-                            text: "terminal"
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: Ai.terminalMode ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface
-                        }
-                        StyledText {
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Ai.terminalMode ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3onSurface
-                            text: Translation.tr("Terminal")
-                        }
-                    }
-
-                    StyledToolTip {
-                        text: Ai.terminalMode
-                            ? Translation.tr("Terminal mode enabled\nResponses contain only commands")
-                            : Translation.tr("Enable terminal mode\nToggle with %1cmd").arg(root.commandPrefix)
-                    }
-                }
-
-                RippleButton { // Terminal auto-run toggle
-                    id: terminalAutoRunButton
-                    visible: true
-                    toggled: Ai.terminalAutoRun
-                    implicitWidth: terminalAutoRunRow.implicitWidth + 16
-                    implicitHeight: 28
-                    buttonRadius: Appearance.rounding.verysmall
-                    colBackground: "transparent"
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                    colRipple: Appearance.colors.colLayer2Active
-                    colRippleToggled: Appearance.colors.colSecondaryContainerActive
-                    downAction: () => Ai.setTerminalAutoRun(!Ai.terminalAutoRun)
-
-                    contentItem: RowLayout {
-                        id: terminalAutoRunRow
-                        anchors.centerIn: parent
-                        spacing: 5
-
-                        MaterialSymbol {
-                            text: "bolt"
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: Ai.terminalAutoRun ? Appearance.m3colors.m3onSecondaryContainer : Appearance.m3colors.m3onSurface
-                        }
-                        StyledText {
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Ai.terminalAutoRun ? Appearance.m3colors.m3onSecondaryContainer : Appearance.m3colors.m3onSurface
-                            text: Translation.tr("Auto")
-                        }
-                    }
-
-                    StyledToolTip {
-                        text: Ai.terminalAutoRun
-                            ? Translation.tr("Auto-run enabled\nSafe commands are executed automatically")
-                            : Translation.tr("Enable auto-run\nCommands will only show the Ejecutar button")
-                    }
                 }
 
                 Item {

@@ -115,20 +115,6 @@ Recommendations open on the platform that is currently playing:
 | Spotify | Resolves the exact track and starts it through MPRIS. A temporary Hyprland `no_focus` rule keeps Spotify from raising its window, so focus and workspace do not move. Spotify API credentials are required for exact matching. |
 | Unknown player | Falls back to a YouTube search. |
 
-### Terminal mode in AI chat
-
-The **AI** sidebar tab (open with `Super + A`) has a **Terminal** toggle next to the input row.
-The same mode can be toggled with `/cmd`.
-
-- When enabled, the system prompt is replaced with a strict Linux command-only prompt for
-  CachyOS/Arch, and tool calls are disabled.
-- **Auto** is enabled by default: safe commands are executed automatically. This also covers
-  harmless `run_shell_command` calls made by the normal AI chat. Destructive commands
-  are not auto-run; their **Ejecutar** button remains available for manual confirmation.
-- Responses also get **Copiar comando**, which copies the command with `wl-copy`, and
-  **Ejecutar**, which opens the command in the configured terminal.
-- The mode and the auto-run setting are persisted across sessions.
-
 ### New Reddit tab
 
 - A dedicated **Reddit** sidebar tab with the Reddit logo and branding.
@@ -241,7 +227,6 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 - `kdialog` — file/folder pickers.
 - `btop` — resource meter action in the bar.
 - `xdg-utils` — opening recommendations in the active platform.
-- `wl-clipboard` — `wl-copy` for copied commands and code blocks.
 - `libnotify` — desktop notifications.
 
 ### Optional
