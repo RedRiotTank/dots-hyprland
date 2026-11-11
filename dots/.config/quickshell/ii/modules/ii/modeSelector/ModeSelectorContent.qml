@@ -13,6 +13,11 @@ Item {
     id: root
     signal closeRequested()
 
+    // Closing the selector should not throw away the current draft either.
+    onCloseRequested: {
+        if (root.dirty && !root.busy) root.saveDraft();
+    }
+
     focus: true
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
@@ -31,13 +36,39 @@ Item {
         return JSON.parse(JSON.stringify(profile));
     }
 
-    function selectProfile(profileId) {
+    function loadProfile(profileId) {
         const profile = ProfileManager.profileById(profileId);
         if (!profile) return;
         root.selectedId = profileId;
         root.draft = root.cloneProfile(profile);
         root.dirty = false;
         root.deleteArmed = false;
+    }
+
+    function selectProfile(profileId) {
+        // Selecting another mode must not silently discard the edits made to
+        // the previous one. Persist the draft first, then load the target.
+        if (root.dirty && root.draft && root.draft.id !== profileId && !root.busy) {
+            const targetId = profileId;
+            const draft = root.cloneProfile(root.draft);
+            root.busy = true;
+            ProfileManager.updateProfile(draft.id, draft, (updated, exitCode) => {
+                root.busy = false;
+                if (exitCode === 0 && updated && !updated.error) {
+                    root.replaceDraft(updated);
+                }
+                root.loadProfile(targetId);
+            });
+            return;
+        }
+        root.loadProfile(profileId);
+    }
+
+    function replaceDraft(profile) {
+        if (!profile) return;
+        root.selectedId = profile.id;
+        root.draft = profile;
+        root.dirty = false;
     }
 
     function updateDraft(patch) {
