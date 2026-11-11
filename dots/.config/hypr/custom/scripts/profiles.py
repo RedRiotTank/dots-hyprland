@@ -49,6 +49,8 @@ NOTIFICATION_ART_DIR = HOME / "Pictures" / "notifications"
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp", ".gif"}
+VIDEO_EXTENSIONS = {".mp4", ".webm", ".mov", ".mkv", ".m4v"}
+NOTIFICATION_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 
 
 def load_json(path: Path, fallback):
@@ -73,6 +75,17 @@ def image_files(folder: Path) -> list[Path]:
         return sorted(
             entry for entry in folder.iterdir()
             if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS
+        )
+    except OSError:
+        return []
+
+
+def media_files(folder: Path) -> list[Path]:
+    """Return notification art (images or videos) in a folder, sorted."""
+    try:
+        return sorted(
+            entry for entry in folder.iterdir()
+            if entry.is_file() and entry.suffix.lower() in NOTIFICATION_EXTENSIONS
         )
     except OSError:
         return []
@@ -306,9 +319,9 @@ def remove_spotifast_images(profile_id: str) -> None:
 def resolve_notification_image(profile_id: str, current: str) -> str:
     """Return the notification-panel art for a profile.
 
-    Images live in ~/Pictures/notifications as <profile-id>.<ext> or inside a
+    Media lives in ~/Pictures/notifications as <profile-id>.<ext> or inside a
     <profile-id>/ folder. The panel respects transparency, so GIFs and PNGs
-    work with or without a background.
+    work with or without a background, and videos can remove a green screen.
     """
     if current:
         candidate = Path(current).expanduser()
@@ -321,12 +334,12 @@ def resolve_notification_image(profile_id: str, current: str) -> str:
 
     try:
         for entry in sorted(NOTIFICATION_ART_DIR.iterdir()):
-            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
+            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in NOTIFICATION_EXTENSIONS:
                 return str(entry)
     except OSError:
         pass
 
-    files = image_files(NOTIFICATION_ART_DIR / profile_id)
+    files = media_files(NOTIFICATION_ART_DIR / profile_id)
     return str(files[0]) if files else ""
 
 
@@ -334,7 +347,7 @@ def remove_notification_images(profile_id: str) -> None:
     """Remove the managed notification art for a deleted profile."""
     try:
         for entry in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
-            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
+            if entry.is_file() and entry.suffix.lower() in NOTIFICATION_EXTENSIONS:
                 entry.unlink()
     except OSError:
         pass
@@ -373,6 +386,7 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
     vesktop_enabled = bool(profile.get("vesktopBackgroundEnabled", True))
     spotifast_enabled = bool(profile.get("spotifastBackgroundEnabled", True))
     notification_enabled = bool(profile.get("notificationImageEnabled", True))
+    notification_chroma = bool(profile.get("notificationChromaKey", True))
     return {
         "id": profile_id,
         "name": profile.get("name") or profile_id,
@@ -396,6 +410,7 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         "notificationImage": resolve_notification_image(
             profile_id, profile.get("notificationImage") or ""
         ) if notification_enabled else "",
+        "notificationChromaKey": notification_chroma,
         "tabs": normalize_tabs(profile.get("tabs")),
     }
 
@@ -576,7 +591,7 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
     for key in ("name", "wallpaperFolder", "wallpaper", "terminal"):
         if key in patch and isinstance(patch[key], str):
             profile[key] = patch[key]
-    for key in ("floatingImages", "weebPolicy", "coloredIcons"):
+    for key in ("floatingImages", "weebPolicy", "coloredIcons", "notificationChromaKey"):
         if key in patch:
             profile[key] = bool(patch[key])
     if "wallpaperInterval" in patch:
@@ -776,14 +791,14 @@ def clear_spotifast_background(data: dict, profile_id: str) -> dict:
 
 
 def set_notification_image(data: dict, profile_id: str, image_path: str) -> dict:
-    """Copy an image/GIF into ~/Pictures/notifications for a profile."""
+    """Copy an image, GIF or video into ~/Pictures/notifications for a profile."""
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     source = Path(image_path).expanduser().resolve()
     if not source.is_file():
-        raise ValueError(f"Image not found: {image_path}")
-    if source.suffix.lower() not in IMAGE_EXTENSIONS:
-        raise ValueError(f"Unsupported image format: {source.suffix}")
+        raise ValueError(f"Media not found: {image_path}")
+    if source.suffix.lower() not in NOTIFICATION_EXTENSIONS:
+        raise ValueError(f"Unsupported media format: {source.suffix}")
 
     NOTIFICATION_ART_DIR.mkdir(parents=True, exist_ok=True)
     target = NOTIFICATION_ART_DIR / f"{profile_id}{source.suffix.lower()}"
@@ -792,7 +807,7 @@ def set_notification_image(data: dict, profile_id: str, image_path: str) -> dict
 
     for old in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
         try:
-            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
+            if old.is_file() and old != target and old.suffix.lower() in NOTIFICATION_EXTENSIONS:
                 old.unlink()
         except OSError:
             pass
