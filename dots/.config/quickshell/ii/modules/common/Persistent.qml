@@ -15,6 +15,14 @@ Singleton {
     property string previousHyprlandInstanceSignature: ""
     property bool isNewHyprlandInstance: previousHyprlandInstanceSignature !== states.hyprlandInstanceSignature
 
+    // Force pending in-memory state (for example sticker positions that were
+    // just dragged) to disk before an external script rewrites states.json.
+    function flush() {
+        if (!root.ready) return;
+        fileWriteTimer.stop();
+        persistentStatesFileView.writeAdapter();
+    }
+
     readonly property list<string> overlayWidgetIdentifiers: [
         "crosshair", "floatingImage", "floatingImage1", "floatingImage2",
         "floatingImage3", "floatingImage4", "floatingImage5", "floatingImage6",

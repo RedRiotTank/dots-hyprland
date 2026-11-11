@@ -18,7 +18,8 @@ if [[ -f "$PROFILES_FILE" ]]; then
 fi
 
 if [[ -z "$folder" ]]; then
-    folder="$HOME/Pictures/Wallpapers/$mode"
+    DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+    folder="$DATA_HOME/redOpinion_IlogicalImpulse/$mode/wallpapers"
 fi
 
 mkdir -p "$folder"

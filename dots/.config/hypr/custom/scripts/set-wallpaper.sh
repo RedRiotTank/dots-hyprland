@@ -5,9 +5,13 @@
 set -euo pipefail
 
 image="${1:-}"
+mode="${2:-dark}"
 if [[ -z "$image" || ! -f "$image" ]]; then
-    echo "Usage: set-wallpaper.sh <image>" >&2
+    echo "Usage: set-wallpaper.sh <image> [dark|light]" >&2
     exit 1
+fi
+if [[ "$mode" != "dark" && "$mode" != "light" ]]; then
+    mode="dark"
 fi
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/illogical-impulse"
@@ -29,7 +33,7 @@ printf '%s\n' "$profile_id" > "$STATE_DIR/mode"
 printf '%s\n' "$new_path" > "$STATE_DIR/wallpaper-$profile_id"
 
 if [[ -x "$SWITCHWALL" ]]; then
-    "$SWITCHWALL" --image "$new_path" --mode dark
+    "$SWITCHWALL" --image "$new_path" --mode "$mode"
 else
     echo "Wallpaper switch script not found: $SWITCHWALL" >&2
     exit 1

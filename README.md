@@ -87,7 +87,7 @@ Upstream illogical-impulse offers a **weeb policy** switch. This fork extends th
 full desktop-mode system:
 
 - unlimited profiles, each with its own wallpaper folder;
-- a selected wallpaper and optional wallpaper rotation interval;
+- a selected wallpaper and an independent wallpaper rotation interval per profile;
 - floating-image visibility;
 - colored or flat sidebar icons;
 - terminal greeting style (`pokemon-colorscripts` or CachyOS `fastfetch`);
@@ -98,6 +98,22 @@ Profiles are stored in:
 ```text
 ~/.config/illogical-impulse/profiles.json
 ```
+
+All media owned by a profile lives together under:
+
+```text
+~/.local/share/redOpinion_IlogicalImpulse/
+└── <profile-id>/
+    ├── wallpapers/
+    ├── stickers/
+    ├── vesktop/
+    ├── spotifast/
+    └── notifications/
+```
+
+The mode selector creates these folders automatically. Keeping a complete profile in one
+place makes backups and per-mode cleanup straightforward. Files from older releases that used
+`~/Pictures` are moved into this tree once, when the fork loads `profiles.json` after updating.
 
 The last active profile is restored automatically at login. A preview-based mode selector is
 available with `Super + Shift + W`, and profiles can be created, edited, applied, or deleted
@@ -129,8 +145,7 @@ Recommendations open on the platform that is currently playing:
 
 Each desktop mode can have its own **Vesktop** (Discord) background:
 
-- images live in `~/Pictures/vesktop`, either as `<profile-id>.<ext>` or inside a
-  `<profile-id>/` folder;
+- the image lives in `~/.local/share/redOpinion_IlogicalImpulse/<profile-id>/vesktop/`;
 - the image can be chosen or disabled from the Desktop modes panel (`Super + Shift + W`);
 - applying a mode writes a managed block to Vesktop's QuickCSS file and keeps any CSS
   outside the markers untouched;
@@ -144,8 +159,7 @@ appearance unchanged.
 
 Spotifast uses the same per-mode idea, with its own images:
 
-- images live in `~/Pictures/spotifast`, either as `<profile-id>.<ext>` or inside a
-  `<profile-id>/` folder;
+- the image lives in `~/.local/share/redOpinion_IlogicalImpulse/<profile-id>/spotifast/`;
 - the image can be chosen or disabled from the Desktop modes panel (`Super + Shift + W`);
 - the active profile writes `~/.config/spotifast/background-image`, which an open Spotifast
   watches and applies without restarting playback;
@@ -160,12 +174,23 @@ user-local binary and never needs root.
 The right-side notification panel can show a vertical image or GIF in the space left free by
 notifications:
 
-- images live in `~/Pictures/notifications`, either as `<profile-id>.<ext>` or inside a
-  `<profile-id>/` folder;
+- the image lives in `~/.local/share/redOpinion_IlogicalImpulse/<profile-id>/notifications/`;
 - the image is shown only while the notification list leaves enough free vertical space;
 - transparency is respected, so GIFs and PNGs work with or without their own background;
 - choose or disable it from the Desktop modes panel (`Super + Shift + W`);
 - profiles without an image keep the normal empty state.
+
+### Floating stickers per desktop mode
+
+Floating images (stickers) are also profile-owned:
+
+- each mode remembers which stickers are open, their image, size, monitor and position;
+- switching modes saves the current layout under the outgoing profile and restores the target
+  profile's layout;
+- sticker files are copied into `~/.local/share/redOpinion_IlogicalImpulse/<profile-id>/stickers/`
+  when you pick them from the overlay;
+- the sticker picker opens the active mode's own folder;
+- profiles without stickers simply show none.
 
 ### New Reddit tab
 
@@ -285,10 +310,10 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 
 - `waypaper` — optional wallpaper picker bound to `Super + Alt + W`.
 - `pokemon-colorscripts-git` — optional Pokemon terminal greeting.
-- Vesktop with Vencord QuickCSS — optional per-mode Discord background stored in
-  `~/Pictures/vesktop`.
+- Vesktop with Vencord QuickCSS — optional per-mode Discord background stored in each mode's
+  `vesktop/` folder.
 - Spotifast with the included background patch — optional per-mode music client background
-  stored in `~/Pictures/spotifast`.
+  stored in each mode's `spotifast/` folder.
 - A local Spotify client, plus Spotify API credentials if you want exact Spotify track
   recommendations.
 
@@ -360,13 +385,13 @@ cp dots/.config/fish/conf.d/00-user.fish ~/.config/fish/conf.d/00-user.fish
 
 - Wallpaper fallback uses `~/.config/quickshell/ii/assets/images/default_wallpaper.png`
   if the profile folders are empty.
-- Create personal wallpaper folders if you want your own images:
+- The mode selector creates each profile's resource folders automatically. To add images by
+  hand, open the profile folder:
   ```bash
-  mkdir -p ~/Pictures/Wallpapers/weeb ~/Pictures/Wallpapers/sober
+  xdg-open ~/.local/share/redOpinion_IlogicalImpulse/weeb
   ```
-- Optional: create `~/Pictures/vesktop`, `~/Pictures/spotifast` and
-  `~/Pictures/notifications`, then add one image per profile. You can also choose the images
-  from the Desktop modes panel.
+- You can also choose wallpapers, stickers, Vesktop/Spotifast backgrounds and notification art
+  directly from the Desktop modes panel and the overlay sticker picker.
 - Open **Desktop modes** with `Super + Shift + W` to create or edit profiles.
 - If `waypaper` is not installed, the `Super + Alt + W` shortcut displays a notification
   instead of opening a picker. The built-in wallpaper selector still works.
@@ -545,7 +570,7 @@ file from:
 
 ### Vesktop background does not change when switching modes
 
-Check that the profile has an image in `~/Pictures/vesktop` (or choose one from Desktop
+Check that the profile has an image in its `vesktop/` folder (or choose one from Desktop
 modes). The helper writes a managed block to:
 
 ```text
@@ -559,7 +584,7 @@ live. A profile with the background disabled removes only the managed block.
 ### Spotifast background does not change when switching modes
 
 Spotifast needs the patched build from `sdata/spotifast-background`; the upstream release only
-supports colour themes. Check that the profile has an image in `~/Pictures/spotifast` and that
+supports colour themes. Check that the profile has an image in its `spotifast/` folder and that
 `~/.config/spotifast/background-image` points to it. An open Spotifast notices the marker about
 twice a second; if you launched it before the patch was installed, restart it once. Also keep
 `"check_for_updates": false` in `~/.config/spotifast/settings.json`: an automatic update would
@@ -569,7 +594,7 @@ replace the patched binary.
 
 It only appears while the notification list leaves enough free space; with enough
 notifications the panel needs the room and hides it. Check that the active profile has an
-image in `~/Pictures/notifications` and that the image is a supported format (PNG, JPEG,
+image in its `notifications/` folder and that the image is a supported format (PNG, JPEG,
 WebP, GIF, AVIF or BMP). Transparent GIFs and PNGs keep their transparency.
 
 ### Recommendations do not open the right application

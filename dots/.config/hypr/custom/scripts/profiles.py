@@ -2,8 +2,21 @@
 """Manage illogical-impulse desktop profiles.
 
 Profiles are stored in ~/.config/illogical-impulse/profiles.json. Each profile
-has its own wallpaper folder, wallpaper, terminal style, floating-image
-setting, weeb policy and sidebar tab visibility.
+has its own wallpaper folder, wallpaper, sticker layout, terminal style,
+floating-image setting, weeb policy and sidebar tab visibility.
+
+All user media (wallpapers, stickers, Vesktop/Spotifast backgrounds and
+notification art) lives inside the profile folder:
+
+    ~/.local/share/redOpinion_IlogicalImpulse/<profile-id>/
+        wallpapers/
+        stickers/
+        vesktop/
+        spotifast/
+        notifications/
+
+Older releases stored those files in ~/Pictures. They are migrated once when
+the profile file is loaded for the first time after the update.
 """
 
 from __future__ import annotations
@@ -30,9 +43,21 @@ STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / 
 STATES_FILE = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local" / "state")) / "quickshell" / "states.json"
 WAYPAPER_CONFIG = HOME / ".config" / "waypaper" / "config.ini"
 SWITCHWALL = HOME / ".config" / "quickshell" / "ii" / "scripts" / "colors" / "switchwall.sh"
-DEFAULT_WALLPAPER_DIR = HOME / "Pictures" / "Wallpapers"
 FALLBACK_WALLPAPER = HOME / ".config" / "quickshell" / "ii" / "assets" / "images" / "default_wallpaper.png"
-VESKTOP_DIR = HOME / "Pictures" / "vesktop"
+
+# Per-profile resources. Keep the folder name stable: users back it up and the
+# README documents it. XDG_DATA_HOME is respected for non-standard setups.
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share"))
+PROFILE_ROOT = DATA_HOME / "redOpinion_IlogicalImpulse"
+RESOURCE_VERSION = 2
+
+# Legacy locations, only used for the one-time migration.
+LEGACY_WALLPAPER_DIR = HOME / "Pictures" / "Wallpapers"
+LEGACY_VESKTOP_DIR = HOME / "Pictures" / "vesktop"
+LEGACY_SPOTIFAST_DIR = HOME / "Pictures" / "spotifast"
+LEGACY_NOTIFICATION_ART_DIR = HOME / "Pictures" / "notifications"
+LEGACY_STICKERS_DIR = HOME / "Pictures" / "stickers"
+
 VESKTOP_APP_DIR = HOME / ".config" / "vesktop"
 VESKTOP_SETTINGS_DIR = VESKTOP_APP_DIR / "settings"
 VESKTOP_QUICK_CSS = VESKTOP_SETTINGS_DIR / "quickCss.css"
@@ -41,14 +66,13 @@ VESKTOP_THEMES_DIR = VESKTOP_APP_DIR / "themes"
 VESKTOP_THEME_LINK = VESKTOP_THEMES_DIR / "ii-vesktop-backgrounds"
 VESKTOP_BLOCK_START = "/* >>> illogical-impulse vesktop background >>> */"
 VESKTOP_BLOCK_END = "/* <<< illogical-impulse vesktop background <<< */"
-SPOTIFAST_DIR = HOME / "Pictures" / "spotifast"
 SPOTIFAST_APP_DIR = HOME / ".config" / "spotifast"
 SPOTIFAST_BACKGROUND_FILE = SPOTIFAST_APP_DIR / "background-image"
-NOTIFICATION_ART_DIR = HOME / "Pictures" / "notifications"
 
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".bmp", ".gif"}
+STICKER_SLOT_KEYS = tuple(f"floatingImage{index}" for index in range(1, 13))
 
 
 def load_json(path: Path, fallback):
@@ -67,8 +91,29 @@ def save_json(path: Path, data) -> None:
     os.replace(temporary, path)
 
 
+def profile_paths(profile_id: str) -> dict[str, Path]:
+    """Return the canonical resource folders for a profile."""
+    base = PROFILE_ROOT / profile_id
+    return {
+        "profile": base,
+        "wallpapers": base / "wallpapers",
+        "stickers": base / "stickers",
+        "vesktop": base / "vesktop",
+        "spotifast": base / "spotifast",
+        "notifications": base / "notifications",
+    }
+
+
+def ensure_profile_dirs(profile_id: str) -> dict[str, Path]:
+    paths = profile_paths(profile_id)
+    for key, folder in paths.items():
+        if key != "profile":
+            folder.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
 def image_files(folder: Path) -> list[Path]:
-    """Return the image wallpapers contained in a profile folder, sorted."""
+    """Return the image files contained in a folder, sorted."""
     try:
         return sorted(
             entry for entry in folder.iterdir()
@@ -88,54 +133,229 @@ def same_file_content(left: Path, right: Path) -> bool:
         return False
 
 
+def import_image(source: Path, folder: Path, move: bool = False) -> Path:
+    """Put an image inside ``folder`` without losing existing files.
+
+    If the source is already inside the folder it is returned untouched.
+    Identical files reuse the existing target; different files with the same
+    name get a numeric suffix. ``move`` is used by the one-time migration so
+    the old ~/Pictures folders are actually emptied.
+    """
+    source = source.expanduser()
+    try:
+        candidate = source.resolve()
+    except OSError:
+        candidate = source
+
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        folder_resolved = folder.resolve()
+    except OSError:
+        folder_resolved = folder
+
+    # A migrated file may already be in place even when the path stored in
+    # profiles.json or states.json still points to ~/Pictures.
+    if not candidate.is_file():
+        fallback = folder / source.name
+        if fallback.is_file():
+            return fallback
+        return candidate
+
+    try:
+        if candidate.parent == folder_resolved or folder_resolved in candidate.parents:
+            return candidate
+    except OSError:
+        pass
+
+    target = folder / candidate.name
+    index = 2
+    while target.exists() and not same_file_content(candidate, target):
+        target = folder / f"{candidate.stem}-{index}{candidate.suffix}"
+        index += 1
+
+    try:
+        if not target.exists():
+            if move:
+                shutil.move(str(candidate), str(target))
+            else:
+                shutil.copy2(candidate, target)
+        elif move:
+            # The same file is already in the destination; remove the source
+            # so the legacy folder can disappear cleanly.
+            candidate.unlink()
+    except OSError:
+        return candidate
+    return target
+
+
+def copy_single_image(source: Path, folder: Path) -> Path:
+    """Replace the one managed image of a folder with ``source``."""
+    folder.mkdir(parents=True, exist_ok=True)
+    suffix = source.suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        suffix = ".png"
+    target = folder / f"background{suffix}"
+    try:
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
+    except OSError:
+        return source
+    try:
+        for entry in folder.iterdir():
+            if entry.is_file() and entry != target and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                entry.unlink()
+    except OSError:
+        pass
+    return target
+
+
+def migrate_directory(source: Path, target: Path) -> None:
+    """Move every item from ``source`` into ``target`` (recursive merge)."""
+    if not source.is_dir():
+        return
+    try:
+        if source.resolve() == target.resolve():
+            return
+    except OSError:
+        pass
+    target.mkdir(parents=True, exist_ok=True)
+    try:
+        entries = list(source.iterdir())
+    except OSError:
+        return
+    for entry in entries:
+        try:
+            if entry.is_dir():
+                child_target = target / entry.name
+                if child_target.exists() and child_target.is_dir():
+                    migrate_directory(entry, child_target)
+                elif not child_target.exists():
+                    shutil.move(str(entry), str(child_target))
+            elif entry.is_file():
+                import_image(entry, target, move=True)
+        except OSError:
+            continue
+    try:
+        source.rmdir()
+    except OSError:
+        pass
+
+
+def migrate_named_profile_media(profile_id: str, profile_name: str, legacy_root: Path, target: Path) -> None:
+    """Move ``<profile>.*`` files and ``<profile>/`` folders from a legacy dir.
+
+    Profile names are checked too: an old profile called "miku" may have kept
+    its id as ``new-mode-2`` while its stickers lived in ``stickers/miku``.
+    """
+    names = {profile_id, slugify(profile_name or profile_id)}
+    for name in names:
+        if not name:
+            continue
+        try:
+            for entry in legacy_root.glob(f"{name}.*"):
+                if entry.is_file():
+                    import_image(entry, target, move=True)
+        except OSError:
+            pass
+        migrate_directory(legacy_root / name, target)
+
+
+def migrate_resources(data: dict) -> None:
+    """Move resources from the old ~/Pictures layout into profile folders."""
+    profiles = data.get("profiles", {})
+    if not isinstance(profiles, dict):
+        return
+
+    for profile_id, profile in profiles.items():
+        if not isinstance(profile, dict):
+            continue
+        paths = ensure_profile_dirs(profile_id)
+        profile_name = str(profile.get("name") or profile_id)
+
+        # Wallpaper: move the selected image before the whole folder so the
+        # exact wallpaper is preserved instead of relying on sort order.
+        old_wallpaper = str(profile.get("wallpaper") or "")
+        if old_wallpaper:
+            wallpaper_path = Path(old_wallpaper).expanduser()
+            if wallpaper_path.is_file():
+                profile["wallpaper"] = str(import_image(wallpaper_path, paths["wallpapers"], move=True))
+            else:
+                fallback = paths["wallpapers"] / wallpaper_path.name
+                if fallback.is_file():
+                    profile["wallpaper"] = str(fallback)
+
+        old_folder = str(profile.get("wallpaperFolder") or "")
+        if old_folder:
+            migrate_directory(Path(old_folder).expanduser(), paths["wallpapers"])
+        profile["wallpaperFolder"] = str(paths["wallpapers"])
+
+        for key, legacy_root in (
+            ("vesktop", LEGACY_VESKTOP_DIR),
+            ("spotifast", LEGACY_SPOTIFAST_DIR),
+            ("notifications", LEGACY_NOTIFICATION_ART_DIR),
+            ("stickers", LEGACY_STICKERS_DIR),
+        ):
+            current = str(profile.get(f"{key}Background") or "") if key != "notifications" else str(profile.get("notificationImage") or "")
+            if current:
+                current_path = Path(current).expanduser()
+                if current_path.is_file():
+                    import_image(current_path, paths[key], move=True)
+            migrate_named_profile_media(profile_id, profile_name, legacy_root, paths[key])
+
+        # normalize_profile() discovers the moved files again.
+        profile["vesktopBackground"] = ""
+        profile["spotifastBackground"] = ""
+        profile["notificationImage"] = ""
+
+
+def resolve_media(folder: Path, current: str, import_external: bool = False) -> str:
+    """Return an image inside ``folder``, repairing stale paths when possible."""
+    folder = folder.expanduser()
+    if current:
+        candidate = Path(current).expanduser()
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_file():
+                try:
+                    folder_resolved = folder.resolve()
+                    if resolved.parent == folder_resolved or folder_resolved in resolved.parents:
+                        return str(resolved)
+                    if import_external:
+                        return str(import_image(resolved, folder))
+                except OSError:
+                    pass
+        except OSError:
+            pass
+        fallback = folder / candidate.name
+        if fallback.is_file():
+            return str(fallback)
+
+    files = image_files(folder)
+    return str(files[0]) if files else ""
+
+
 def resolve_wallpaper(folder: str, wallpaper: str) -> str:
     """Keep the configured wallpaper if it still exists, otherwise fall back
     to the first image in the profile folder. This prevents a deleted image
     (or a stale profile entry) from leaving the desktop without a wallpaper."""
-    if wallpaper:
-        candidate = Path(wallpaper).expanduser()
-        if candidate.is_file():
-            return str(candidate)
-    files = image_files(Path(folder).expanduser())
-    if files:
-        return str(files[0])
+    result = resolve_media(Path(folder).expanduser(), wallpaper, import_external=True)
+    if result:
+        return result
     if FALLBACK_WALLPAPER.is_file():
         return str(FALLBACK_WALLPAPER)
     return ""
 
 
 def resolve_vesktop_background(profile_id: str, current: str) -> str:
-    """Return the image for a profile inside ~/Pictures/vesktop.
-
-    A profile may use either a flat file (<profile-id>.<ext>) or a folder
-    (<profile-id>/<image>). Paths outside that folder are ignored so the
-    repository and profiles.json never depend on arbitrary locations.
-    """
-    if current:
-        candidate = Path(current).expanduser()
-        try:
-            resolved = candidate.resolve()
-            if resolved.is_file() and VESKTOP_DIR.resolve() in resolved.parents:
-                return str(resolved)
-        except OSError:
-            pass
-
-    try:
-        for entry in sorted(VESKTOP_DIR.iterdir()):
-            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                return str(entry)
-    except OSError:
-        pass
-
-    files = image_files(VESKTOP_DIR / profile_id)
-    return str(files[0]) if files else ""
+    return resolve_media(profile_paths(profile_id)["vesktop"], current)
 
 
 def ensure_vesktop_theme_link() -> bool:
-    """Expose ~/Pictures/vesktop to Vencord's vencord:// theme protocol."""
+    """Expose the profile root to Vencord's vencord:// theme protocol."""
     try:
         VESKTOP_THEMES_DIR.mkdir(parents=True, exist_ok=True)
-        target = VESKTOP_DIR.resolve()
+        target = PROFILE_ROOT.resolve()
+        PROFILE_ROOT.mkdir(parents=True, exist_ok=True)
         if VESKTOP_THEME_LINK.is_symlink():
             if VESKTOP_THEME_LINK.resolve() == target:
                 return True
@@ -153,12 +373,12 @@ def vesktop_image_url(image: str) -> str:
 
     Electron blocks plain file:// images from the Discord origin. Vencord
     serves files under ~/.config/vesktop/themes through vencord://, so the
-    Pictures folder is exposed with a symlink. Data URLs are a fallback for
+    profile root is exposed with a symlink. Data URLs are a fallback for
     filesystems where symlinks are unavailable.
     """
     path = Path(image)
     try:
-        relative = path.resolve().relative_to(VESKTOP_DIR.resolve()).as_posix()
+        relative = path.resolve().relative_to(PROFILE_ROOT.resolve()).as_posix()
     except (OSError, ValueError):
         relative = path.name
 
@@ -251,25 +471,7 @@ def update_vesktop(profile: dict) -> None:
 
 
 def resolve_spotifast_background(profile_id: str, current: str) -> str:
-    """Return the image for a profile inside ~/Pictures/spotifast."""
-    if current:
-        candidate = Path(current).expanduser()
-        try:
-            resolved = candidate.resolve()
-            if resolved.is_file() and SPOTIFAST_DIR.resolve() in resolved.parents:
-                return str(resolved)
-        except OSError:
-            pass
-
-    try:
-        for entry in sorted(SPOTIFAST_DIR.iterdir()):
-            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                return str(entry)
-    except OSError:
-        pass
-
-    files = image_files(SPOTIFAST_DIR / profile_id)
-    return str(files[0]) if files else ""
+    return resolve_media(profile_paths(profile_id)["spotifast"], current)
 
 
 def update_spotifast(profile: dict) -> None:
@@ -293,51 +495,13 @@ def update_spotifast(profile: dict) -> None:
         pass
 
 
-def remove_spotifast_images(profile_id: str) -> None:
-    """Remove the managed Spotifast copies for a deleted profile."""
-    try:
-        for entry in SPOTIFAST_DIR.glob(f"{profile_id}.*"):
-            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                entry.unlink()
-    except OSError:
-        pass
-
-
 def resolve_notification_image(profile_id: str, current: str) -> str:
     """Return the notification-panel art for a profile.
 
-    Images live in ~/Pictures/notifications as <profile-id>.<ext> or inside a
-    <profile-id>/ folder. The panel respects transparency, so GIFs and PNGs
-    work with or without a background.
+    The panel respects transparency, so GIFs and PNGs work with or without a
+    background.
     """
-    if current:
-        candidate = Path(current).expanduser()
-        try:
-            resolved = candidate.resolve()
-            if resolved.is_file() and NOTIFICATION_ART_DIR.resolve() in resolved.parents:
-                return str(resolved)
-        except OSError:
-            pass
-
-    try:
-        for entry in sorted(NOTIFICATION_ART_DIR.iterdir()):
-            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                return str(entry)
-    except OSError:
-        pass
-
-    files = image_files(NOTIFICATION_ART_DIR / profile_id)
-    return str(files[0]) if files else ""
-
-
-def remove_notification_images(profile_id: str) -> None:
-    """Remove the managed notification art for a deleted profile."""
-    try:
-        for entry in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
-            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                entry.unlink()
-    except OSError:
-        pass
+    return resolve_media(profile_paths(profile_id)["notifications"], current)
 
 
 def slugify(name: str) -> str:
@@ -363,8 +527,140 @@ def normalize_tabs(tabs) -> dict:
     return result
 
 
+def normalize_number(value, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def normalize_stickers(stickers) -> dict:
+    """Normalize the per-profile floating-image layout."""
+    result = {"open": [], "entries": {}}
+    if not isinstance(stickers, dict):
+        return result
+
+    entries = stickers.get("entries")
+    if not isinstance(entries, dict):
+        entries = stickers
+    open_identifiers = stickers.get("open")
+    if not isinstance(open_identifiers, list):
+        open_identifiers = []
+
+    for identifier in STICKER_SLOT_KEYS:
+        entry = entries.get(identifier)
+        if not isinstance(entry, dict):
+            continue
+        source = str(entry.get("imageSource") or "")
+        if not source:
+            continue
+        result["entries"][identifier] = {
+            "imageSource": source,
+            "x": normalize_number(entry.get("x"), 0),
+            "y": normalize_number(entry.get("y"), 0),
+            "scale": normalize_number(entry.get("scale"), 0.5),
+            "screenName": str(entry.get("screenName") or ""),
+            "pinned": bool(entry.get("pinned", False)),
+            "clickthrough": bool(entry.get("clickthrough", False)),
+        }
+        if identifier in open_identifiers:
+            result["open"].append(identifier)
+
+    return result
+
+
+def capture_stickers(data: dict, profile_id: str) -> None:
+    """Save the live floating-image layout of the current profile."""
+    profile = data.get("profiles", {}).get(profile_id)
+    if not isinstance(profile, dict):
+        return
+    states = load_json(STATES_FILE, {})
+    overlay = states.get("overlay") if isinstance(states, dict) else None
+    if not isinstance(overlay, dict):
+        return
+
+    stickers_dir = ensure_profile_dirs(profile_id)["stickers"]
+    entries = {}
+    open_identifiers = []
+
+    for identifier in STICKER_SLOT_KEYS:
+        entry = overlay.get(identifier)
+        if not isinstance(entry, dict):
+            continue
+        source = str(entry.get("imageSource") or "")
+        if not source:
+            continue
+        # Keep every sticker inside the profile folder. import_image() is
+        # idempotent, so this is cheap when the file is already there.
+        imported = import_image(Path(source).expanduser(), stickers_dir)
+        entries[identifier] = {
+            "imageSource": str(imported),
+            "x": normalize_number(entry.get("x"), 0),
+            "y": normalize_number(entry.get("y"), 0),
+            "scale": normalize_number(entry.get("scale"), 0.5),
+            "screenName": str(entry.get("screenName") or ""),
+            "pinned": bool(entry.get("pinned", False)),
+            "clickthrough": bool(entry.get("clickthrough", False)),
+        }
+        if identifier in (overlay.get("open") or []):
+            open_identifiers.append(identifier)
+
+    profile["stickers"] = {"open": open_identifiers, "entries": entries}
+
+
+def write_stickers_to_states(profile: dict) -> None:
+    """Replace the live floating-image slots with a profile's saved layout."""
+    states = load_json(STATES_FILE, {})
+    if not isinstance(states, dict):
+        states = {}
+    overlay = states.get("overlay")
+    if not isinstance(overlay, dict):
+        overlay = {}
+        states["overlay"] = overlay
+
+    old_open = overlay.get("open")
+    if not isinstance(old_open, list):
+        old_open = []
+    new_open = [
+        identifier for identifier in old_open
+        if not re.match(r"^floatingImage\d+$", str(identifier))
+    ]
+
+    stickers = normalize_stickers(profile.get("stickers"))
+    for identifier in STICKER_SLOT_KEYS:
+        state = overlay.get(identifier)
+        if not isinstance(state, dict):
+            state = {}
+            overlay[identifier] = state
+        saved = stickers["entries"].get(identifier)
+        if saved:
+            state.update({
+                "imageSource": saved["imageSource"],
+                "x": saved["x"],
+                "y": saved["y"],
+                "scale": saved["scale"],
+                "screenName": saved["screenName"],
+                "pinned": saved["pinned"],
+                "clickthrough": saved["clickthrough"],
+                "width": 0,
+                "height": 0,
+            })
+            if identifier in stickers["open"]:
+                new_open.append(identifier)
+        else:
+            state["imageSource"] = ""
+            state["pinned"] = False
+            state["clickthrough"] = False
+            state["width"] = 0
+            state["height"] = 0
+
+    overlay["open"] = new_open
+    save_json(STATES_FILE, states)
+
+
 def normalize_profile(profile_id: str, profile: dict) -> dict:
-    folder = profile.get("wallpaperFolder") or str(DEFAULT_WALLPAPER_DIR / profile_id)
+    paths = ensure_profile_dirs(profile_id)
+    folder = str(paths["wallpapers"])
     wallpaper = resolve_wallpaper(folder, profile.get("wallpaper") or "")
     try:
         wallpaper_interval = max(0, int(profile.get("wallpaperInterval", 0) or 0))
@@ -396,7 +692,14 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         "notificationImage": resolve_notification_image(
             profile_id, profile.get("notificationImage") or ""
         ) if notification_enabled else "",
+        "stickers": normalize_stickers(profile.get("stickers")),
         "tabs": normalize_tabs(profile.get("tabs")),
+        # Derived paths used by the QML panel and sticker picker.
+        "profileFolder": str(paths["profile"]),
+        "stickersFolder": str(paths["stickers"]),
+        "vesktopFolder": str(paths["vesktop"]),
+        "spotifastFolder": str(paths["spotifast"]),
+        "notificationsFolder": str(paths["notifications"]),
     }
 
 
@@ -413,15 +716,25 @@ def default_profiles() -> dict:
     current_floating = config.get("policies", {}).get("floatingImages", True)
     tabs = current_state_tabs()
 
-    weeb_folder = DEFAULT_WALLPAPER_DIR / "weeb"
-    sober_folder = DEFAULT_WALLPAPER_DIR / "sober"
-    weeb_wallpaper = resolve_wallpaper(str(weeb_folder), "") or current_wallpaper
-    sober_wallpaper = resolve_wallpaper(str(sober_folder), "") or current_wallpaper
+    weeb_folder = str(ensure_profile_dirs("weeb")["wallpapers"])
+    sober_folder = str(ensure_profile_dirs("sober")["wallpapers"])
+    if active not in ("weeb", "sober"):
+        active = "weeb"
+
+    weeb_wallpaper = resolve_media(Path(weeb_folder), "")
+    sober_wallpaper = resolve_media(Path(sober_folder), "")
+    # On a fresh install, keep the wallpaper already configured by upstream
+    # illogical-impulse and import it into the active profile.
+    if current_wallpaper and Path(current_wallpaper).expanduser().is_file():
+        if active == "weeb" and not weeb_wallpaper:
+            weeb_wallpaper = str(import_image(Path(current_wallpaper).expanduser(), Path(weeb_folder)))
+        elif active == "sober" and not sober_wallpaper:
+            sober_wallpaper = str(import_image(Path(current_wallpaper).expanduser(), Path(sober_folder)))
 
     profiles = {
         "weeb": normalize_profile("weeb", {
             "name": "Weeb",
-            "wallpaperFolder": str(weeb_folder),
+            "wallpaperFolder": weeb_folder,
             "wallpaper": weeb_wallpaper,
             "wallpaperInterval": 0,
             "floatingImages": bool(current_floating),
@@ -432,7 +745,7 @@ def default_profiles() -> dict:
         }),
         "sober": normalize_profile("sober", {
             "name": "Sober",
-            "wallpaperFolder": str(sober_folder),
+            "wallpaperFolder": sober_folder,
             "wallpaper": sober_wallpaper,
             "wallpaperInterval": 0,
             "floatingImages": False,
@@ -442,9 +755,7 @@ def default_profiles() -> dict:
             "tabs": tabs,
         }),
     }
-    if active not in profiles:
-        active = "weeb"
-    return {"active": active, "profiles": profiles}
+    return {"active": active, "profiles": profiles, "resourcesVersion": RESOURCE_VERSION}
 
 
 def load_profiles() -> dict:
@@ -452,18 +763,33 @@ def load_profiles() -> dict:
         data = default_profiles()
         save_json(PROFILES_FILE, data)
         return data
+
     data = load_json(PROFILES_FILE, {})
+    if not isinstance(data, dict):
+        return default_profiles()
+
+    if data.get("resourcesVersion", 1) < RESOURCE_VERSION:
+        migrate_resources(data)
+        data["resourcesVersion"] = RESOURCE_VERSION
+        save_json(PROFILES_FILE, data)
+
     profiles = data.get("profiles", {})
     normalized = {}
     for profile_id, profile in profiles.items():
         if isinstance(profile, dict):
             normalized[profile_id] = normalize_profile(profile_id, profile)
     if not normalized:
-        return default_profiles()
+        result = default_profiles()
+        save_json(PROFILES_FILE, result)
+        return result
     active = data.get("active", next(iter(normalized)))
     if active not in normalized:
         active = next(iter(normalized))
-    result = {"active": active, "profiles": normalized}
+    result = {
+        "active": active,
+        "profiles": normalized,
+        "resourcesVersion": RESOURCE_VERSION,
+    }
     # Persist self-healing changes such as a wallpaper that no longer exists.
     if result != data:
         save_json(PROFILES_FILE, result)
@@ -517,14 +843,23 @@ def write_runtime_state(profile: dict) -> None:
 def apply_profile(data: dict, profile_id: str, run_switchwall: bool = True) -> dict:
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
+
+    # Save the layout that is currently on screen under the profile that owns
+    # it before loading the layout of the target profile.
+    previous_id = data.get("active")
+    if previous_id in data["profiles"]:
+        capture_stickers(data, previous_id)
+
     data["active"] = profile_id
-    profile = data["profiles"][profile_id]
+    profile = normalize_profile(profile_id, data["profiles"][profile_id])
+    data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
     update_config(profile)
     update_waypaper(profile)
     write_runtime_state(profile)
     update_vesktop(profile)
     update_spotifast(profile)
+    write_stickers_to_states(profile)
     wallpaper = profile.get("wallpaper", "")
     if run_switchwall and wallpaper and Path(wallpaper).is_file() and SWITCHWALL.is_file():
         subprocess.run(
@@ -539,17 +874,13 @@ def apply_profile(data: dict, profile_id: str, run_switchwall: bool = True) -> d
 def create_profile(data: dict, name: str) -> dict:
     active = data["profiles"].get(data["active"], {})
     profile_id = unique_id(slugify(name or "new-mode"), data["profiles"])
-    folder = DEFAULT_WALLPAPER_DIR / profile_id
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = ensure_profile_dirs(profile_id)["wallpapers"]
 
     wallpaper = ""
     source_wallpaper = active.get("wallpaper", "")
     if source_wallpaper and Path(source_wallpaper).is_file():
-        suffix = Path(source_wallpaper).suffix or ".jpg"
-        target = folder / f"wallpaper{suffix}"
         try:
-            shutil.copy2(source_wallpaper, target)
-            wallpaper = str(target)
+            wallpaper = str(import_image(Path(source_wallpaper), folder))
         except OSError:
             wallpaper = ""
 
@@ -562,6 +893,7 @@ def create_profile(data: dict, name: str) -> dict:
         "weebPolicy": bool(active.get("weebPolicy", False)),
         "coloredIcons": bool(active.get("coloredIcons", True)),
         "terminal": active.get("terminal", "cachyos"),
+        "stickers": {"open": [], "entries": {}},
         "tabs": active.get("tabs", DEFAULT_TABS),
     })
     data["profiles"][profile_id] = profile
@@ -573,9 +905,11 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     profile = data["profiles"][profile_id]
-    for key in ("name", "wallpaperFolder", "wallpaper", "terminal"):
+    for key in ("name", "terminal"):
         if key in patch and isinstance(patch[key], str):
             profile[key] = patch[key]
+    if isinstance(patch.get("wallpaper"), str):
+        profile["wallpaper"] = patch["wallpaper"]
     for key in ("floatingImages", "weebPolicy", "coloredIcons"):
         if key in patch:
             profile[key] = bool(patch[key])
@@ -586,29 +920,10 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
             profile["wallpaperInterval"] = 0
     if "tabs" in patch:
         profile["tabs"] = normalize_tabs({**profile.get("tabs", {}), **patch["tabs"]})
-    # Repair a deleted/renamed wallpaper as soon as the profile is edited.
-    profile["wallpaper"] = resolve_wallpaper(
-        profile.get("wallpaperFolder", ""), profile.get("wallpaper", "")
-    )
-    profile["preview"] = profile.get("wallpaper", "")
-    if profile.get("vesktopBackgroundEnabled", True):
-        profile["vesktopBackground"] = resolve_vesktop_background(
-            profile_id, profile.get("vesktopBackground") or ""
-        )
-    else:
-        profile["vesktopBackground"] = ""
-    if profile.get("spotifastBackgroundEnabled", True):
-        profile["spotifastBackground"] = resolve_spotifast_background(
-            profile_id, profile.get("spotifastBackground") or ""
-        )
-    else:
-        profile["spotifastBackground"] = ""
-    if profile.get("notificationImageEnabled", True):
-        profile["notificationImage"] = resolve_notification_image(
-            profile_id, profile.get("notificationImage") or ""
-        )
-    else:
-        profile["notificationImage"] = ""
+
+    # The folder layout is managed by the helper. Repair deleted/renamed
+    # wallpapers and import a manually typed wallpaper into the profile.
+    profile = normalize_profile(profile_id, profile)
     data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
     if data.get("active") == profile_id:
@@ -622,19 +937,27 @@ def delete_profile(data: dict, profile_id: str) -> dict:
         raise ValueError(f"Unknown profile: {profile_id}")
     if len(data["profiles"]) <= 1:
         raise ValueError("At least one profile is required")
-    remove_vesktop_images(profile_id)
-    remove_spotifast_images(profile_id)
-    remove_notification_images(profile_id)
+
+    paths = profile_paths(profile_id)
     del data["profiles"][profile_id]
     if data["active"] == profile_id:
         data["active"] = next(iter(data["profiles"]))
-        profile = data["profiles"][data["active"]]
+        profile = normalize_profile(data["active"], data["profiles"][data["active"]])
+        data["profiles"][data["active"]] = profile
         update_config(profile)
         update_waypaper(profile)
         write_runtime_state(profile)
         update_vesktop(profile)
         update_spotifast(profile)
+        write_stickers_to_states(profile)
     save_json(PROFILES_FILE, data)
+
+    # A deleted profile owns its complete resource folder.
+    try:
+        if paths["profile"].is_dir():
+            shutil.rmtree(paths["profile"])
+    except OSError:
+        pass
     return data["profiles"][data["active"]]
 
 
@@ -646,24 +969,11 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     if not source.is_file():
         raise ValueError(f"Wallpaper not found: {image_path}")
 
-    folder = Path(profile.get("wallpaperFolder", str(DEFAULT_WALLPAPER_DIR / profile["id"]))).expanduser()
-    folder.mkdir(parents=True, exist_ok=True)
-
-    if source.parent.resolve() == folder.resolve():
-        target = source
-    else:
-        target = folder / source.name
-        index = 2
-        # Reuse an identical file instead of creating a new copy every time
-        # the same wallpaper is selected from another folder.
-        while target.exists() and not same_file_content(source, target):
-            target = folder / f"{source.stem}-{index}{source.suffix}"
-            index += 1
-        if not target.exists():
-            shutil.copy2(source, target)
-
+    folder = ensure_profile_dirs(profile["id"])["wallpapers"]
+    target = import_image(source, folder)
     profile["wallpaper"] = str(target)
     profile["preview"] = str(target)
+    profile["wallpaperFolder"] = str(folder)
     data["profiles"][data["active"]] = profile
     save_json(PROFILES_FILE, data)
     update_waypaper(profile)
@@ -671,18 +981,8 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     return profile
 
 
-def remove_vesktop_images(profile_id: str) -> None:
-    """Remove the managed Vesktop copies for a deleted profile."""
-    try:
-        for entry in VESKTOP_DIR.glob(f"{profile_id}.*"):
-            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
-                entry.unlink()
-    except OSError:
-        pass
-
-
 def set_vesktop_background(data: dict, profile_id: str, image_path: str) -> dict:
-    """Copy an image into ~/Pictures/vesktop and assign it to a profile."""
+    """Copy an image into <profile>/vesktop and assign it to a profile."""
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     source = Path(image_path).expanduser().resolve()
@@ -691,20 +991,7 @@ def set_vesktop_background(data: dict, profile_id: str, image_path: str) -> dict
     if source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError(f"Unsupported image format: {source.suffix}")
 
-    VESKTOP_DIR.mkdir(parents=True, exist_ok=True)
-    target = VESKTOP_DIR / f"{profile_id}{source.suffix.lower()}"
-    if source != target and not (target.exists() and same_file_content(source, target)):
-        shutil.copy2(source, target)
-
-    # Keep one canonical image per profile and remove older copies with a
-    # different extension. Files that do not match the profile id are untouched.
-    for old in VESKTOP_DIR.glob(f"{profile_id}.*"):
-        try:
-            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
-                old.unlink()
-        except OSError:
-            pass
-
+    target = copy_single_image(source, ensure_profile_dirs(profile_id)["vesktop"])
     profile = data["profiles"][profile_id]
     profile["vesktopBackgroundEnabled"] = True
     profile["vesktopBackground"] = str(target)
@@ -730,7 +1017,7 @@ def clear_vesktop_background(data: dict, profile_id: str) -> dict:
 
 
 def set_spotifast_background(data: dict, profile_id: str, image_path: str) -> dict:
-    """Copy an image into ~/Pictures/spotifast and assign it to a profile."""
+    """Copy an image into <profile>/spotifast and assign it to a profile."""
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     source = Path(image_path).expanduser().resolve()
@@ -739,18 +1026,7 @@ def set_spotifast_background(data: dict, profile_id: str, image_path: str) -> di
     if source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError(f"Unsupported image format: {source.suffix}")
 
-    SPOTIFAST_DIR.mkdir(parents=True, exist_ok=True)
-    target = SPOTIFAST_DIR / f"{profile_id}{source.suffix.lower()}"
-    if source != target and not (target.exists() and same_file_content(source, target)):
-        shutil.copy2(source, target)
-
-    for old in SPOTIFAST_DIR.glob(f"{profile_id}.*"):
-        try:
-            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
-                old.unlink()
-        except OSError:
-            pass
-
+    target = copy_single_image(source, ensure_profile_dirs(profile_id)["spotifast"])
     profile = data["profiles"][profile_id]
     profile["spotifastBackgroundEnabled"] = True
     profile["spotifastBackground"] = str(target)
@@ -776,7 +1052,7 @@ def clear_spotifast_background(data: dict, profile_id: str) -> dict:
 
 
 def set_notification_image(data: dict, profile_id: str, image_path: str) -> dict:
-    """Copy an image/GIF into ~/Pictures/notifications for a profile."""
+    """Copy an image/GIF into <profile>/notifications for a profile."""
     if profile_id not in data["profiles"]:
         raise ValueError(f"Unknown profile: {profile_id}")
     source = Path(image_path).expanduser().resolve()
@@ -785,18 +1061,7 @@ def set_notification_image(data: dict, profile_id: str, image_path: str) -> dict
     if source.suffix.lower() not in IMAGE_EXTENSIONS:
         raise ValueError(f"Unsupported image format: {source.suffix}")
 
-    NOTIFICATION_ART_DIR.mkdir(parents=True, exist_ok=True)
-    target = NOTIFICATION_ART_DIR / f"{profile_id}{source.suffix.lower()}"
-    if source != target and not (target.exists() and same_file_content(source, target)):
-        shutil.copy2(source, target)
-
-    for old in NOTIFICATION_ART_DIR.glob(f"{profile_id}.*"):
-        try:
-            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
-                old.unlink()
-        except OSError:
-            pass
-
+    target = copy_single_image(source, ensure_profile_dirs(profile_id)["notifications"])
     profile = data["profiles"][profile_id]
     profile["notificationImageEnabled"] = True
     profile["notificationImage"] = str(target)
@@ -817,6 +1082,20 @@ def clear_notification_image(data: dict, profile_id: str) -> dict:
     return profile
 
 
+def import_sticker(data: dict, profile_id: str, image_path: str) -> dict:
+    """Copy a chosen sticker into the profile's stickers folder."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    source = Path(image_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Image not found: {image_path}")
+    if source.suffix.lower() not in IMAGE_EXTENSIONS:
+        raise ValueError(f"Unsupported image format: {source.suffix}")
+
+    target = import_image(source, ensure_profile_dirs(profile_id)["stickers"])
+    return {"path": str(target)}
+
+
 def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
     """Switch the active profile to the next wallpaper in its folder.
 
@@ -825,7 +1104,7 @@ def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
     profile = data["profiles"].get(profile_id or data["active"])
     if not profile:
         raise ValueError("No active profile")
-    folder = Path(profile.get("wallpaperFolder", "")).expanduser()
+    folder = ensure_profile_dirs(profile["id"])["wallpapers"]
     files = image_files(folder)
     if not files:
         return profile
@@ -840,6 +1119,7 @@ def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
     if str(target) != profile.get("wallpaper"):
         profile["wallpaper"] = str(target)
         profile["preview"] = str(target)
+        profile["wallpaperFolder"] = str(folder)
         data["profiles"][profile["id"]] = profile
         save_json(PROFILES_FILE, data)
         update_config(profile)
@@ -893,6 +1173,9 @@ def main() -> None:
         elif command == "clear-notification-image":
             profile = clear_notification_image(data, sys.argv[2])
             print(json.dumps(profile, ensure_ascii=False))
+        elif command == "import-sticker":
+            result = import_sticker(data, sys.argv[2], sys.argv[3])
+            print(json.dumps(result, ensure_ascii=False))
         elif command == "rotate-wallpaper":
             profile = rotate_wallpaper(data, sys.argv[2] if len(sys.argv) > 2 else None)
             print(json.dumps(profile, ensure_ascii=False))

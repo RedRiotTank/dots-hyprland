@@ -19,8 +19,13 @@ Singleton {
     property string generateThumbnailsMagickScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/generate-thumbnails-magick.sh`
     property alias directory: folderModel.folder
     readonly property string effectiveDirectory: FileUtils.trimFileProtocol(folderModel.folder.toString())
-    // Keep the built-in wallpaper selector in the same folder as waypaper.
-    property url defaultFolder: Qt.resolvedUrl(`${Directories.pictures}/Wallpapers/${Config.options.policies.weeb !== 0 ? "weeb" : "sober"}`)
+    readonly property string profileWallpaperHelper: `${Quickshell.env("HOME")}/.config/hypr/custom/scripts/set-wallpaper.sh`
+    // Keep the built-in wallpaper selector in the active profile's folder,
+    // the same folder waypaper opens.
+    readonly property url defaultFolder: Qt.resolvedUrl(
+        ProfileManager.activeProfile?.wallpaperFolder
+        ?? `${Directories.pictures}/Wallpapers`
+    )
     property alias folderModel: folderModel // Expose for direct binding when needed
     property string searchQuery: ""
     readonly property list<string> extensions: [ // TODO: add videos
@@ -42,7 +47,17 @@ Singleton {
 
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
-        Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", darkMode ? "dark" : "light", "--image", path]);
+        const mode = darkMode ? "dark" : "light";
+        const image = StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(path));
+        const helper = StringUtils.shellSingleQuoteEscape(root.profileWallpaperHelper);
+        const fallback = StringUtils.shellSingleQuoteEscape(Directories.wallpaperSwitchScriptPath);
+        // Route the selection through the profile helper so the image is
+        // copied into the active desktop mode's wallpapers folder. Fall back
+        // to the upstream script on installations without the fork helper.
+        Quickshell.execDetached(["bash", "-c",
+            `if [ -x '${helper}' ] && '${helper}' '${image}' '${mode}'; then :; `
+            + `else '${fallback}' --mode '${mode}' --image '${image}'; fi`
+        ]);
         root.changed()
     }
 
@@ -111,6 +126,13 @@ Singleton {
     }
     function navigateForward() {
         folderModel.navigateForward()
+    }
+
+    Connections {
+        target: ProfileManager
+        function onActiveIdChanged() {
+            root.setDirectory(root.defaultFolder);
+        }
     }
 
     // Folder model

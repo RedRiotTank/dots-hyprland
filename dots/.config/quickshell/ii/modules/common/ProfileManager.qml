@@ -83,10 +83,12 @@ Singleton {
             root.pendingAction = { args: args, callback: callback };
             return;
         }
-        // The Python helper rewrites config.json. Make sure any pending QML
-        // changes (weather city, wallpaper, policies...) are already on disk
-        // so they are not lost when the helper loads and saves the file.
+        // The Python helper rewrites config.json and states.json. Make sure any
+        // pending QML changes (weather city, wallpaper, policies, sticker
+        // positions...) are already on disk so they are not lost when the
+        // helper loads and saves those files.
         Config.flush();
+        Persistent.flush();
         actionProcess.command = ["python3", root.helperPath].concat(args);
         actionProcess.currentCallback = callback;
         actionProcess.running = true;
@@ -110,6 +112,10 @@ Singleton {
     }
 
     readonly property int wallpaperInterval: root.activeProfile?.wallpaperInterval ?? 0
+
+    onWallpaperIntervalChanged: {
+        if (root.wallpaperInterval > 0) wallpaperRotationTimer.restart();
+    }
 
     Timer {
         id: wallpaperRotationTimer
@@ -228,6 +234,18 @@ Singleton {
             if (updated && !updated.error) root.replaceLocalProfile(updated);
             if (callback) callback(updated, exitCode);
         });
+    }
+
+    function importSticker(profileId, imagePath, callback) {
+        root.runAction(["import-sticker", profileId, imagePath], (text, exitCode) => {
+            let result = null;
+            try { result = JSON.parse(text); } catch (error) { result = null; }
+            if (callback) callback(result, exitCode);
+        });
+    }
+
+    onActiveIdChanged: {
+        if (root.wallpaperInterval > 0) wallpaperRotationTimer.restart();
     }
 
     Component.onCompleted: reload()
