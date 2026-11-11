@@ -1,0 +1,286 @@
+diff --git a/src/background.rs b/src/background.rs
+new file mode 100644
+index 0000000..5fcf6ac
+--- /dev/null
++++ b/src/background.rs
+@@ -0,0 +1,168 @@
++//! A per-desktop-mode image painted behind the main window.
++//!
++//! The desktop-mode helper writes the active image path to
++//! `background-image` in Spotifast's config folder. This module loads it,
++//! watches its modification time, and paints it on the window's background
++//! layer. Panel fills are made translucent while it is active so the image
++//! stays visible without hiding the controls.
++
++use crate::paths::AppDirs;
++use egui::{Color32, Context, Id, LayerId, Rect, TextureHandle, TextureOptions, Vec2};
++use std::path::{Path, PathBuf};
++use std::time::{Duration, SystemTime};
++
++const FILE_NAME: &str = "background-image";
++const STATE_ID: &str = "illogical-impulse-spotifast-background";
++const TEXTURE_NAME: &str = "illogical-impulse-spotifast-background";
++const REPAINT_AFTER: Duration = Duration::from_millis(400);
++/// Darkens the image so text and controls stay readable.
++const OVERLAY_ALPHA: u8 = 115;
++/// How much of the theme panel colour remains over the image.
++const PANEL_ALPHA: u8 = 205;
++
++#[derive(Clone)]
++struct State {
++    stamp: Option<(SystemTime, u64)>,
++    texture: Option<TextureHandle>,
++    size: [usize; 2],
++}
++
++impl Default for State {
++    fn default() -> Self {
++        Self {
++            stamp: None,
++            texture: None,
++            size: [0, 0],
++        }
++    }
++}
++
++fn marker_path(dirs: &AppDirs) -> PathBuf {
++    dirs.config.join(FILE_NAME)
++}
++
++fn image_path(marker: &Path) -> Option<PathBuf> {
++    let text = std::fs::read_to_string(marker).ok()?;
++    let value = text.trim();
++    if value.is_empty() {
++        return None;
++    }
++    let path = PathBuf::from(value);
++    let path = if path.is_absolute() {
++        path
++    } else {
++        marker.parent()?.join(path)
++    };
++    path.is_file().then_some(path)
++}
++
++fn load(path: &Path) -> Option<([usize; 2], egui::ColorImage)> {
++    let bytes = std::fs::read(path).ok()?;
++    let image = image::load_from_memory(&bytes).ok()?.to_rgba8();
++    let size = [image.width() as usize, image.height() as usize];
++    if size[0] == 0 || size[1] == 0 {
++        return None;
++    }
++    let color = egui::ColorImage::from_rgba_unmultiplied(size, image.as_raw());
++    Some((size, color))
++}
++
++/// Cover the window without changing the image's aspect ratio.
++fn cover_uv(image: [usize; 2], window: Vec2) -> Rect {
++    let image_aspect = image[0] as f32 / image[1] as f32;
++    let window_aspect = window.x / window.y.max(1.0);
++    if image_aspect >= window_aspect {
++        let width = window_aspect / image_aspect;
++        let left = (1.0 - width) / 2.0;
++        Rect::from_min_max(egui::pos2(left, 0.0), egui::pos2(left + width, 1.0))
++    } else {
++        let height = image_aspect / window_aspect;
++        let top = (1.0 - height) / 2.0;
++        Rect::from_min_max(egui::pos2(0.0, top), egui::pos2(1.0, top + height))
++    }
++}
++
++/// Load or refresh the image, then paint it behind the UI.
++pub fn paint(ctx: &Context, dirs: &AppDirs) {
++    let marker = marker_path(dirs);
++    let wanted = image_path(&marker);
++    let stamp = wanted.as_ref().and_then(|path| {
++        let meta = std::fs::metadata(path).ok()?;
++        let modified = meta.modified().ok()?;
++        Some((modified, meta.len()))
++    });
++
++    let previous = ctx.data(|data| data.get_temp::<State>(Id::new(STATE_ID)));
++    let previous_stamp = previous.as_ref().and_then(|state| state.stamp);
++    if previous_stamp != stamp {
++        let loaded = wanted
++            .as_ref()
++            .and_then(|path| load(path))
++            .map(|(size, image)| {
++                let texture = ctx.load_texture(TEXTURE_NAME, image, TextureOptions::LINEAR);
++                (size, texture)
++            });
++        let state = match (wanted, loaded) {
++            (Some(_), Some((size, texture))) => State {
++                stamp,
++                texture: Some(texture),
++                size,
++            },
++            _ => State {
++                stamp,
++                texture: None,
++                size: [0, 0],
++            },
++        };
++        ctx.data_mut(|data| data.insert_temp(Id::new(STATE_ID), state));
++    }
++
++    let state = ctx.data(|data| data.get_temp::<State>(Id::new(STATE_ID)));
++    let texture = state.as_ref().and_then(|state| state.texture.clone());
++    let size = state.as_ref().map_or([0, 0], |state| state.size);
++    if texture.is_some() || marker.exists() {
++        // The helper changes the marker file while this window is idle.
++        ctx.request_repaint_after(REPAINT_AFTER);
++    }
++
++    let Some(texture) = texture else {
++        return;
++    };
++    let screen = ctx.viewport_rect();
++    if screen.width() <= 0.0 || screen.height() <= 0.0 {
++        return;
++    }
++    let painter = ctx.layer_painter(LayerId::background());
++    painter.image(
++        texture.id(),
++        screen,
++        cover_uv(size, screen.size()),
++        Color32::WHITE,
++    );
++    painter.rect_filled(screen, 0.0, Color32::from_black_alpha(OVERLAY_ALPHA));
++}
++
++fn active(ctx: &Context) -> bool {
++    ctx.data(|data| {
++        data.get_temp::<State>(Id::new(STATE_ID))
++            .is_some_and(|state| state.texture.is_some())
++    })
++}
++
++/// The central page becomes see-through so the image shows behind it.
++pub fn window_fill(ctx: &Context, color: Color32) -> Color32 {
++    if active(ctx) {
++        Color32::TRANSPARENT
++    } else {
++        color
++    }
++}
++
++/// Sidebars and the player bar keep their colour but let the image through.
++pub fn panel_fill(ctx: &Context, color: Color32) -> Color32 {
++    if active(ctx) {
++        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), PANEL_ALPHA)
++    } else {
++        color
++    }
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index 23ae8c7..d334309 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -8,6 +8,7 @@ pub mod appearance;
+ pub mod auth;
+ pub mod autoscroll;
+ pub mod backend;
++pub mod background;
+ pub mod bidi;
+ pub mod cast;
+ pub mod credentials;
+diff --git a/src/ui/friends.rs b/src/ui/friends.rs
+index 3eeba84..db48dcb 100644
+--- a/src/ui/friends.rs
++++ b/src/ui/friends.rs
+@@ -35,7 +35,7 @@ pub fn side_panel(app: &mut App, ui: &mut egui::Ui) {
+         .show_separator_line(false)
+         .frame(
+             Frame::new()
+-                .fill(palette.panel)
++                .fill(crate::background::panel_fill(ui.ctx(), palette.panel))
+                 .inner_margin(Margin::symmetric(12, 12)),
+         );
+     let response = panel.show(ui, |ui| {
+diff --git a/src/ui/lyrics.rs b/src/ui/lyrics.rs
+index 829bca0..092c2c0 100644
+--- a/src/ui/lyrics.rs
++++ b/src/ui/lyrics.rs
+@@ -52,7 +52,7 @@ pub fn side_panel(app: &mut App, ui: &mut egui::Ui) {
+         .show_separator_line(false)
+         .frame(
+             Frame::new()
+-                .fill(palette.panel)
++                .fill(crate::background::panel_fill(ui.ctx(), palette.panel))
+                 .inner_margin(Margin::symmetric(12, 12)),
+         );
+     let response = panel.show(ui, |ui| {
+diff --git a/src/ui/mod.rs b/src/ui/mod.rs
+index 2504a94..d1af865 100644
+--- a/src/ui/mod.rs
++++ b/src/ui/mod.rs
+@@ -39,6 +39,7 @@ use crate::theme::{self, Icon};
+ pub fn show(app: &mut App, ui: &mut egui::Ui) {
+     let ctx = ui.ctx().clone();
+     let ctx = &ctx;
++    crate::background::paint(ctx, &app.dirs);
+     keys::handle(app, ctx);
+     for path in winamp::dropped_skins(ctx) {
+         app.actions.push(Action::InstallSkin(path));
+@@ -305,7 +306,7 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
+     let palette = app.palette;
+     let tint = page_tint(app);
+     egui::CentralPanel::default()
+-        .frame(Frame::new().fill(palette.window))
++        .frame(Frame::new().fill(crate::background::window_fill(ui.ctx(), palette.window)))
+         .show(ui, |ui| {
+             let rect = ui.max_rect();
+             let page = app.page().clone();
+diff --git a/src/ui/player_bar.rs b/src/ui/player_bar.rs
+index 3f9c447..ff7bd74 100644
+--- a/src/ui/player_bar.rs
++++ b/src/ui/player_bar.rs
+@@ -52,7 +52,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
+         .show_separator_line(false)
+         .frame(
+             Frame::new()
+-                .fill(fill)
++                .fill(crate::background::panel_fill(ui.ctx(), fill))
+                 .inner_margin(Margin::symmetric(16, 0)),
+         )
+         .show(ui, |ui| {
+diff --git a/src/ui/queue.rs b/src/ui/queue.rs
+index 734f9e6..6c709f6 100644
+--- a/src/ui/queue.rs
++++ b/src/ui/queue.rs
+@@ -50,7 +50,7 @@ pub fn side_panel(app: &mut App, ui: &mut egui::Ui) {
+         .show_separator_line(false)
+         .frame(
+             Frame::new()
+-                .fill(palette.panel)
++                .fill(crate::background::panel_fill(ui.ctx(), palette.panel))
+                 .inner_margin(Margin::symmetric(12, 12)),
+         );
+     let response = panel.show(ui, |ui| {
+diff --git a/src/ui/sidebar.rs b/src/ui/sidebar.rs
+index 04bf637..00df97e 100644
+--- a/src/ui/sidebar.rs
++++ b/src/ui/sidebar.rs
+@@ -565,12 +565,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
+         .default_size(app.settings.sidebar_width)
+         .size_range(fit.range.clone())
+         .show_separator_line(false)
+-        .frame(Frame::new().fill(palette.panel).inner_margin(Margin {
+-            left: 12,
+-            right: 8,
+-            top,
+-            bottom: if expanded_art { 0 } else { 8 },
+-        }));
++        .frame(
++            Frame::new()
++                .fill(crate::background::panel_fill(ui.ctx(), palette.panel))
++                .inner_margin(Margin {
++                    left: 12,
++                    right: 8,
++                    top,
++                    bottom: if expanded_art { 0 } else { 8 },
++                }),
++        );
+     let response = panel.show(ui, |ui| {
+         let art_rect = expanded_art.then(|| expanded_art_rect(ui));
+         if let Some(rect) = art_rect.filter(|_| !floating_art) {

@@ -194,6 +194,24 @@ Singleton {
         });
     }
 
+    function setSpotifastBackground(profileId, imagePath, callback) {
+        root.runAction(["set-spotifast-background", profileId, imagePath], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
+    function clearSpotifastBackground(profileId, callback) {
+        root.runAction(["clear-spotifast-background", profileId], (text, exitCode) => {
+            let updated = null;
+            try { updated = JSON.parse(text); } catch (error) { updated = null; }
+            if (updated && !updated.error) root.replaceLocalProfile(updated);
+            if (callback) callback(updated, exitCode);
+        });
+    }
+
     Component.onCompleted: reload()
 
     Process {
