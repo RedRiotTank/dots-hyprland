@@ -30,6 +30,13 @@ NestableObject {
         var biggestWindow = HyprlandData.biggestWindowForWorkspace(wsId);
         return biggestWindow;
     })
+    property list<int> windowCounts: {
+        const windows = HyprlandData.windowList;
+        return occupied.map((_, index) => {
+            const wsId = getWorkspaceIdAt(index);
+            return windows.filter(win => win.workspace.id === wsId).length;
+        });
+    }
 
     function getWorkspaceId(group, index) {
         return root.workspaceBase + group * root.shownCount + index + 1;
