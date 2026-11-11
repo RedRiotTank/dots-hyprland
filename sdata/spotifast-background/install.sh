@@ -48,7 +48,26 @@ mkdir -p "$DEST" "$BIN_DIR" "$ICON_DIR" "$APP_DIR"
 install -m 755 target/release/spotifast "$DEST/spotifast"
 ln -sfn "$DEST/spotifast" "$BIN_DIR/spotifast"
 install -m 644 packaging/icons/spotifast.svg "$ICON_DIR/spotifast.svg"
-install -m 644 packaging/applications/spotifast.desktop "$APP_DIR/spotifast.desktop"
+# Use the absolute path: a desktop session does not always have ~/.local/bin
+# in PATH, which makes the menu entry silently do nothing.
+cat > "$APP_DIR/spotifast.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Spotifast
+GenericName=Music Player
+Comment=A native Spotify client
+Exec=$DEST/spotifast %u
+TryExec=$DEST/spotifast
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;
+Keywords=spotify;music;player;streaming;spotifast;
+Icon=spotifast
+StartupNotify=true
+StartupWMClass=spotifast
+MimeType=x-scheme-handler/spotify;
+EOF
+chmod 644 "$APP_DIR/spotifast.desktop"
 update-desktop-database "$APP_DIR" >/dev/null 2>&1 || true
 
 echo
