@@ -9,7 +9,53 @@ import QtQuick.Layouts
 Item {
     id: root
 
+    readonly property var activeProfile: ProfileManager.activeProfile
+    readonly property bool artEnabled: activeProfile?.notificationImageEnabled !== false
+    readonly property string artPath: activeProfile?.notificationImage ?? ""
+    readonly property real artAvailableHeight: Math.max(0, listview.height - listview.contentHeight)
+    readonly property real artMaxWidth: Math.max(0, listview.width - 20)
+    readonly property real artMaxHeight: Math.max(0, artAvailableHeight - 10)
+    readonly property bool artReady: notificationArt.status === Image.Ready
+    readonly property bool showArt: artEnabled
+        && artPath.length > 0
+        && artMaxWidth > 40
+        && artMaxHeight > 80
+        && artReady
+    readonly property real artScale: {
+        if (notificationArt.implicitWidth <= 0 || notificationArt.implicitHeight <= 0) return 0;
+        return Math.min(artMaxWidth / notificationArt.implicitWidth,
+                        artMaxHeight / notificationArt.implicitHeight);
+    }
+
+    Item { // Decorative art in the space the list leaves free.
+        id: artContainer
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: statusRow.top
+            bottomMargin: 8
+        }
+        height: root.artMaxHeight
+        visible: root.showArt
+        z: 0
+
+        AnimatedImage {
+            id: notificationArt
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            source: root.artPath.length > 0 ? Qt.resolvedUrl(root.artPath) : ""
+            width: Math.max(1, implicitWidth * root.artScale)
+            height: Math.max(1, implicitHeight * root.artScale)
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            cache: false
+            playing: visible
+            smooth: true
+        }
+    }
+
     NotificationListView { // Scrollable window
+        z: 1
         id: listview
         anchors.left: parent.left
         anchors.right: parent.right
@@ -32,7 +78,7 @@ Item {
 
     // Placeholder when list is empty
     PagePlaceholder {
-        shown: Notifications.list.length === 0
+        shown: Notifications.list.length === 0 && !root.showArt
         icon: "notifications_active"
         description: Translation.tr("Nothing")
         shape: MaterialShape.Shape.Ghostish

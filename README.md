@@ -155,6 +155,18 @@ Upstream Spotifast's theme format only changes colours, so the repository includ
 patch and a build/install helper under `sdata/spotifast-background`. The helper installs a
 user-local binary and never needs root.
 
+### Notification panel art per desktop mode
+
+The right-side notification panel can show a vertical image or GIF in the space left free by
+notifications:
+
+- images live in `~/Pictures/notifications`, either as `<profile-id>.<ext>` or inside a
+  `<profile-id>/` folder;
+- the image is shown only while the notification list leaves enough free vertical space;
+- transparency is respected, so GIFs and PNGs work with or without their own background;
+- choose or disable it from the Desktop modes panel (`Super + Shift + W`);
+- profiles without an image keep the normal empty state.
+
 ### New Reddit tab
 
 - A dedicated **Reddit** sidebar tab with the Reddit logo and branding.
@@ -352,8 +364,9 @@ cp dots/.config/fish/conf.d/00-user.fish ~/.config/fish/conf.d/00-user.fish
   ```bash
   mkdir -p ~/Pictures/Wallpapers/weeb ~/Pictures/Wallpapers/sober
   ```
-- Optional: create `~/Pictures/vesktop` and `~/Pictures/spotifast`, then add one image per
-  profile for the app backgrounds. You can also choose the images from the Desktop modes panel.
+- Optional: create `~/Pictures/vesktop`, `~/Pictures/spotifast` and
+  `~/Pictures/notifications`, then add one image per profile. You can also choose the images
+  from the Desktop modes panel.
 - Open **Desktop modes** with `Super + Shift + W` to create or edit profiles.
 - If `waypaper` is not installed, the `Super + Alt + W` shortcut displays a notification
   instead of opening a picker. The built-in wallpaper selector still works.
@@ -551,6 +564,13 @@ supports colour themes. Check that the profile has an image in `~/Pictures/spoti
 twice a second; if you launched it before the patch was installed, restart it once. Also keep
 `"check_for_updates": false` in `~/.config/spotifast/settings.json`: an automatic update would
 replace the patched binary.
+
+### Notification art does not appear
+
+It only appears while the notification list leaves enough free space; with enough
+notifications the panel needs the room and hides it. Check that the active profile has an
+image in `~/Pictures/notifications` and that the image is a supported format (PNG, JPEG,
+WebP, GIF, AVIF or BMP). Transparent GIFs and PNGs keep their transparency.
 
 ### Recommendations do not open the right application
 
