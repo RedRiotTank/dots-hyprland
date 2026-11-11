@@ -24,6 +24,7 @@
 ## Table of contents
 
 - [What is this?](#what-is-this)
+- [Branches](#branches)
 - [Highlights](#highlights)
 - [Opinionated defaults](#opinionated-defaults)
 - [Requirements](#requirements)
@@ -51,7 +52,7 @@ and adds a set of workflow-focused changes on top of it.
 - Upstream repository: <https://github.com/end-4/dots-hyprland>
 - Upstream documentation: <https://ii.clsty.link>
 - Fork repository: <https://github.com/RedRiotTank/dots-hyprland>
-- Upstream base at the time of this fork: `2f2a376`
+- Upstream base at the time of this fork: `cb1c428`
 
 This fork is not affiliated with, endorsed by, or supported by the upstream project.
 
@@ -63,6 +64,15 @@ It is intended for people who want:
 - a small set of practical quality-of-life fixes.
 
 The fork is distributed under the same GPL-3.0 license as upstream.
+
+### Branches
+
+- **`main`** — the stable, public version of the fork. It contains every addition except the
+  optional AI terminal enhancements.
+- **`feature/ai-enhancement`** — adds terminal command mode, safe-command auto-run, command
+  actions, and Gemini thought-signature handling on top of `main`.
+
+Use `main` unless you specifically want the AI terminal workflow.
 
 ---
 
@@ -266,11 +276,11 @@ cd dots-hyprland
 ./setup install
 ```
 
-If this fork keeps the custom edition in a separate branch, check it out before running the
-installer:
+The default branch is the stable public version. If you want the optional AI terminal
+enhancements, clone the feature branch instead:
 
 ```bash
-git clone -b changes https://github.com/RedRiotTank/dots-hyprland.git
+git clone -b feature/ai-enhancement https://github.com/RedRiotTank/dots-hyprland.git
 cd dots-hyprland
 ./setup install
 ```
