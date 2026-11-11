@@ -402,7 +402,8 @@ Spotify does not provide anonymous track search. Add app credentials so the laun
 a recommended track to its exact Spotify URI:
 
 1. Create an app at <https://developer.spotify.com/dashboard>.
-2. Export the credentials in your session environment, for example in `~/.config/uwsm/env`:
+2. Export the credentials in your session environment, for example in `~/.config/uwsm/env.local`
+   (this file is user-owned and is not overwritten by the installer):
    ```bash
    export SPOTIFY_CLIENT_ID="your_client_id"
    export SPOTIFY_CLIENT_SECRET="your_client_secret"
