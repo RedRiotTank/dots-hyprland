@@ -171,18 +171,15 @@ user-local binary and never needs root.
 
 ### Notification panel art per desktop mode
 
-The right-side notification panel can show a vertical image, GIF or video in the space left
-free by notifications:
+The right-side notification panel can show a vertical image or GIF in the space left free by
+notifications:
 
-- media lives in `~/Pictures/notifications`, either as `<profile-id>.<ext>` or inside a
+- images live in `~/Pictures/notifications`, either as `<profile-id>.<ext>` or inside a
   `<profile-id>/` folder;
-- the art is shown only while the notification list leaves enough free vertical space;
+- the image is shown only while the notification list leaves enough free vertical space;
 - transparency is respected, so GIFs and PNGs work with or without their own background;
-- videos (`MP4`, `WebM`, `MOV`, `MKV`, `M4V`) loop silently and fill the panel by cropping
-  their sides; the **green screen** button removes a chroma-key background, and can be turned
-  off for ordinary videos;
 - choose or disable it from the Desktop modes panel (`Super + Shift + W`);
-- profiles without media keep the normal empty state.
+- profiles without an image keep the normal empty state.
 
 ### New Reddit tab
 
@@ -306,7 +303,6 @@ Most dependencies are provided by the upstream metapackages. The fork additional
   `~/Pictures/vesktop`.
 - Spotifast with the included background patch — optional per-mode music client background
   stored in `~/Pictures/spotifast`.
-- `qt6-multimedia` — video and green-screen art in the notification panel.
 - A local Spotify client, plus Spotify API credentials if you want exact Spotify track
   recommendations.
 
@@ -586,12 +582,9 @@ replace the patched binary.
 ### Notification art does not appear
 
 It only appears while the notification list leaves enough free space; with enough
-notifications the panel needs the room and hides it. Check that the active profile has media
-in `~/Pictures/notifications` and that it uses a supported format (PNG, JPEG, WebP, GIF, AVIF,
-BMP, MP4, WebM, MOV, MKV or M4V). Transparent GIFs and PNGs keep their transparency. For a
-video, make sure the **green screen** toggle matches the footage: on for a green background,
-off for a normal video. If a video does not play, check that `qt6-multimedia` and the
-GStreamer codecs for its format are installed.
+notifications the panel needs the room and hides it. Check that the active profile has an
+image in `~/Pictures/notifications` and that the image is a supported format (PNG, JPEG,
+WebP, GIF, AVIF or BMP). Transparent GIFs and PNGs keep their transparency.
 
 ### Recommendations do not open the right application
 
