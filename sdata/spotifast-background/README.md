@@ -38,5 +38,7 @@ folder). Choose or disable them from **Desktop modes** (`Super + Shift + W`).
 
 - The patch is pinned to Spotifast `0.17.1`. A newer upstream release may need a refreshed
   patch; set `SPOTIFAST_VERSION` to build another version after checking that it applies.
+- Spotifast's built-in updater replaces the binary. Set `"check_for_updates": false` in
+  `~/.config/spotifast/settings.json`, then re-run this script after a manual update.
 - If the patched binary misbehaves, the official build can be restored by reinstalling the
   `spotifast-bin` AUR package or the upstream release.

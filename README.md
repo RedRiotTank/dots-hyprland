@@ -548,7 +548,9 @@ live. A profile with the background disabled removes only the managed block.
 Spotifast needs the patched build from `sdata/spotifast-background`; the upstream release only
 supports colour themes. Check that the profile has an image in `~/Pictures/spotifast` and that
 `~/.config/spotifast/background-image` points to it. An open Spotifast notices the marker about
-twice a second; if you launched it before the patch was installed, restart it once.
+twice a second; if you launched it before the patch was installed, restart it once. Also keep
+`"check_for_updates": false` in `~/.config/spotifast/settings.json`: an automatic update would
+replace the patched binary.
 
 ### Recommendations do not open the right application
 
