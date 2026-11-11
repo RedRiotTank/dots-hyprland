@@ -560,7 +560,7 @@ redistribute this fork, keep the upstream attribution and license notices intact
 
 <div align="center">
 
-**Not affiliated with the upstream project.**  
+**Not affiliated with the upstream project.**<br>
 Use at your own risk, and enjoy your desktop.
 
 </div>
