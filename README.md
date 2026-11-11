@@ -130,8 +130,8 @@ Hyprland numbers:
 - `Super + Left/Right`, `Super + Page Up/Down` and scrolling over the workspace widget cycle
   the focused monitor;
 - workspace rules are generated dynamically when monitors are connected, including at startup;
-- when a workspace has several windows, its bar icon keeps the main app icon and shows a small
-  `+N` badge with the number of additional windows.
+- when a workspace has several windows, its bar icon fans out up to three overlapping app
+  icons; from the fourth window, a small `+N` badge shows the remaining count.
 
 Hyprland workspace ids are still global internally. The fork gives each monitor a disjoint
 block (`monitor 0 -> 1..10`, `monitor 1 -> 11..20`, and so on) and both the Lua helpers and

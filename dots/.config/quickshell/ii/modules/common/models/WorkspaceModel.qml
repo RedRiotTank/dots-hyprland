@@ -30,11 +30,13 @@ NestableObject {
         var biggestWindow = HyprlandData.biggestWindowForWorkspace(wsId);
         return biggestWindow;
     })
-    property list<int> windowCounts: {
+    property list<var> workspaceWindows: {
         const windows = HyprlandData.windowList;
         return occupied.map((_, index) => {
             const wsId = getWorkspaceIdAt(index);
-            return windows.filter(win => win.workspace.id === wsId).length;
+            return windows
+                .filter(win => win.workspace.id === wsId)
+                .sort((a, b) => Number(a.focusHistoryID ?? 9999) - Number(b.focusHistoryID ?? 9999));
         });
     }
 
