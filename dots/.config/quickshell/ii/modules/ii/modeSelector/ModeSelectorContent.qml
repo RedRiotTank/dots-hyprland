@@ -151,6 +151,38 @@ Item {
         });
     }
 
+    function browseSpotifastImage() {
+        pickSpotifastImageProcess.running = true;
+    }
+
+    function setSpotifastBackground(path) {
+        if (!root.draft || path.length === 0) return;
+        root.busy = true;
+        ProfileManager.setSpotifastBackground(root.draft.id, path, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    spotifastBackground: updated.spotifastBackground,
+                    spotifastBackgroundEnabled: updated.spotifastBackgroundEnabled,
+                });
+            }
+        });
+    }
+
+    function clearSpotifastBackground() {
+        if (!root.draft) return;
+        root.busy = true;
+        ProfileManager.clearSpotifastBackground(root.draft.id, (updated, exitCode) => {
+            root.busy = false;
+            if (exitCode === 0 && updated && !updated.error) {
+                root.draft = Object.assign({}, root.draft, {
+                    spotifastBackground: updated.spotifastBackground,
+                    spotifastBackgroundEnabled: updated.spotifastBackgroundEnabled,
+                });
+            }
+        });
+    }
+
     Connections {
         target: ProfileManager
         function onProfileListChanged() {
@@ -216,6 +248,18 @@ Item {
         }
     }
 
+    Process {
+        id: pickSpotifastImageProcess
+        running: false
+        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/spotifast"; kdialog --getopenfilename "$HOME/Pictures/spotifast" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const path = text.trim();
+                if (path.length > 0) root.setSpotifastBackground(path);
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         color: "#00000077"
@@ -234,7 +278,7 @@ Item {
         anchors.centerIn: parent
         z: 1
         implicitWidth: Math.min(parent.width - 80, 1240)
-        implicitHeight: Math.min(parent.height - 80, 820)
+        implicitHeight: Math.min(parent.height - 80, 860)
         radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
         color: Appearance.colors.colLayer0
         border.width: 1
@@ -440,11 +484,11 @@ Item {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 10
+                    spacing: 8
 
                     ModePreview {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 220
+                        Layout.preferredHeight: 190
                         profile: root.draft
                     }
 
@@ -549,6 +593,46 @@ Item {
 
                             StyledToolTip {
                                 text: Translation.tr("Disable the Vesktop background for this mode")
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        StyledText {
+                            Layout.preferredWidth: 120
+                            text: Translation.tr("Spotifast")
+                            color: Appearance.colors.colSubtext
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            elide: Text.ElideRight
+                        }
+                        ToolbarTextField {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 36
+                            Layout.fillHeight: false
+                            readOnly: true
+                            text: root.draft?.spotifastBackground ?? ""
+                            placeholderText: Translation.tr("~/Pictures/spotifast/<profile>.jpg")
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "image"
+                            onClicked: root.browseSpotifastImage()
+
+                            StyledToolTip {
+                                text: Translation.tr("Choose the Spotifast background for this mode.\nThe image is copied to ~/Pictures/spotifast.")
+                            }
+                        }
+                        IconToolbarButton {
+                            implicitHeight: 36
+                            text: "delete"
+                            enabled: (root.draft?.spotifastBackground ?? "").length > 0
+                            onClicked: root.clearSpotifastBackground()
+
+                            StyledToolTip {
+                                text: Translation.tr("Disable the Spotifast background for this mode")
                             }
                         }
                     }

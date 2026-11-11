@@ -140,6 +140,21 @@ Each desktop mode can have its own **Vesktop** (Discord) background:
 Vesktop itself remains optional. Profiles without an image simply leave Vesktop's normal
 appearance unchanged.
 
+### Spotifast background per desktop mode
+
+Spotifast uses the same per-mode idea, with its own images:
+
+- images live in `~/Pictures/spotifast`, either as `<profile-id>.<ext>` or inside a
+  `<profile-id>/` folder;
+- the image can be chosen or disabled from the Desktop modes panel (`Super + Shift + W`);
+- the active profile writes `~/.config/spotifast/background-image`, which an open Spotifast
+  watches and applies without restarting playback;
+- panels stay translucent over the image, and menus/dialogs remain readable.
+
+Upstream Spotifast's theme format only changes colours, so the repository includes a small
+patch and a build/install helper under `sdata/spotifast-background`. The helper installs a
+user-local binary and never needs root.
+
 ### New Reddit tab
 
 - A dedicated **Reddit** sidebar tab with the Reddit logo and branding.
@@ -260,6 +275,8 @@ Most dependencies are provided by the upstream metapackages. The fork additional
 - `pokemon-colorscripts-git` — optional Pokemon terminal greeting.
 - Vesktop with Vencord QuickCSS — optional per-mode Discord background stored in
   `~/Pictures/vesktop`.
+- Spotifast with the included background patch — optional per-mode music client background
+  stored in `~/Pictures/spotifast`.
 - A local Spotify client, plus Spotify API credentials if you want exact Spotify track
   recommendations.
 
@@ -335,8 +352,8 @@ cp dots/.config/fish/conf.d/00-user.fish ~/.config/fish/conf.d/00-user.fish
   ```bash
   mkdir -p ~/Pictures/Wallpapers/weeb ~/Pictures/Wallpapers/sober
   ```
-- Optional: create `~/Pictures/vesktop` and add one image per profile for Vesktop backgrounds.
-  You can also choose the image from the Desktop modes panel.
+- Optional: create `~/Pictures/vesktop` and `~/Pictures/spotifast`, then add one image per
+  profile for the app backgrounds. You can also choose the images from the Desktop modes panel.
 - Open **Desktop modes** with `Super + Shift + W` to create or edit profiles.
 - If `waypaper` is not installed, the `Super + Alt + W` shortcut displays a notification
   instead of opening a picker. The built-in wallpaper selector still works.
@@ -525,6 +542,13 @@ modes). The helper writes a managed block to:
 Keep your own CSS outside the `illogical-impulse vesktop background` markers. If Vesktop was
 running when QuickCSS was first enabled, restart it once; later profile changes are applied
 live. A profile with the background disabled removes only the managed block.
+
+### Spotifast background does not change when switching modes
+
+Spotifast needs the patched build from `sdata/spotifast-background`; the upstream release only
+supports colour themes. Check that the profile has an image in `~/Pictures/spotifast` and that
+`~/.config/spotifast/background-image` points to it. An open Spotifast notices the marker about
+twice a second; if you launched it before the patch was installed, restart it once.
 
 ### Recommendations do not open the right application
 

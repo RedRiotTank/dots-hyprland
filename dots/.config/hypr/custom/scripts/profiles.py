@@ -41,6 +41,9 @@ VESKTOP_THEMES_DIR = VESKTOP_APP_DIR / "themes"
 VESKTOP_THEME_LINK = VESKTOP_THEMES_DIR / "ii-vesktop-backgrounds"
 VESKTOP_BLOCK_START = "/* >>> illogical-impulse vesktop background >>> */"
 VESKTOP_BLOCK_END = "/* <<< illogical-impulse vesktop background <<< */"
+SPOTIFAST_DIR = HOME / "Pictures" / "spotifast"
+SPOTIFAST_APP_DIR = HOME / ".config" / "spotifast"
+SPOTIFAST_BACKGROUND_FILE = SPOTIFAST_APP_DIR / "background-image"
 
 TAB_KEYS = ("ai", "translator", "anime", "social", "lyrics")
 DEFAULT_TABS = {key: True for key in TAB_KEYS}
@@ -246,6 +249,59 @@ def update_vesktop(profile: dict) -> None:
         pass
 
 
+def resolve_spotifast_background(profile_id: str, current: str) -> str:
+    """Return the image for a profile inside ~/Pictures/spotifast."""
+    if current:
+        candidate = Path(current).expanduser()
+        try:
+            resolved = candidate.resolve()
+            if resolved.is_file() and SPOTIFAST_DIR.resolve() in resolved.parents:
+                return str(resolved)
+        except OSError:
+            pass
+
+    try:
+        for entry in sorted(SPOTIFAST_DIR.iterdir()):
+            if entry.is_file() and entry.stem == profile_id and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                return str(entry)
+    except OSError:
+        pass
+
+    files = image_files(SPOTIFAST_DIR / profile_id)
+    return str(files[0]) if files else ""
+
+
+def update_spotifast(profile: dict) -> None:
+    """Point the patched Spotifast window at this profile's image.
+
+    Spotifast watches this marker file, so writing or removing it updates an
+    already open window without restarting the app.
+    """
+    image = ""
+    if profile.get("spotifastBackgroundEnabled", True):
+        image = resolve_spotifast_background(
+            profile.get("id", ""), profile.get("spotifastBackground") or ""
+        )
+    try:
+        if image:
+            SPOTIFAST_APP_DIR.mkdir(parents=True, exist_ok=True)
+            SPOTIFAST_BACKGROUND_FILE.write_text(image + "\n", encoding="utf-8")
+        elif SPOTIFAST_BACKGROUND_FILE.exists():
+            SPOTIFAST_BACKGROUND_FILE.unlink()
+    except OSError:
+        pass
+
+
+def remove_spotifast_images(profile_id: str) -> None:
+    """Remove the managed Spotifast copies for a deleted profile."""
+    try:
+        for entry in SPOTIFAST_DIR.glob(f"{profile_id}.*"):
+            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                entry.unlink()
+    except OSError:
+        pass
+
+
 def slugify(name: str) -> str:
     value = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return value or "mode"
@@ -277,6 +333,7 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
     except (TypeError, ValueError):
         wallpaper_interval = 0
     vesktop_enabled = bool(profile.get("vesktopBackgroundEnabled", True))
+    spotifast_enabled = bool(profile.get("spotifastBackgroundEnabled", True))
     return {
         "id": profile_id,
         "name": profile.get("name") or profile_id,
@@ -292,6 +349,10 @@ def normalize_profile(profile_id: str, profile: dict) -> dict:
         "vesktopBackground": resolve_vesktop_background(
             profile_id, profile.get("vesktopBackground") or ""
         ) if vesktop_enabled else "",
+        "spotifastBackgroundEnabled": spotifast_enabled,
+        "spotifastBackground": resolve_spotifast_background(
+            profile_id, profile.get("spotifastBackground") or ""
+        ) if spotifast_enabled else "",
         "tabs": normalize_tabs(profile.get("tabs")),
     }
 
@@ -420,6 +481,7 @@ def apply_profile(data: dict, profile_id: str, run_switchwall: bool = True) -> d
     update_waypaper(profile)
     write_runtime_state(profile)
     update_vesktop(profile)
+    update_spotifast(profile)
     wallpaper = profile.get("wallpaper", "")
     if run_switchwall and wallpaper and Path(wallpaper).is_file() and SWITCHWALL.is_file():
         subprocess.run(
@@ -492,10 +554,17 @@ def update_profile(data: dict, profile_id: str, patch: dict) -> dict:
         )
     else:
         profile["vesktopBackground"] = ""
+    if profile.get("spotifastBackgroundEnabled", True):
+        profile["spotifastBackground"] = resolve_spotifast_background(
+            profile_id, profile.get("spotifastBackground") or ""
+        )
+    else:
+        profile["spotifastBackground"] = ""
     data["profiles"][profile_id] = profile
     save_json(PROFILES_FILE, data)
     if data.get("active") == profile_id:
         update_vesktop(profile)
+        update_spotifast(profile)
     return profile
 
 
@@ -505,6 +574,7 @@ def delete_profile(data: dict, profile_id: str) -> dict:
     if len(data["profiles"]) <= 1:
         raise ValueError("At least one profile is required")
     remove_vesktop_images(profile_id)
+    remove_spotifast_images(profile_id)
     del data["profiles"][profile_id]
     if data["active"] == profile_id:
         data["active"] = next(iter(data["profiles"]))
@@ -513,6 +583,7 @@ def delete_profile(data: dict, profile_id: str) -> dict:
         update_waypaper(profile)
         write_runtime_state(profile)
         update_vesktop(profile)
+        update_spotifast(profile)
     save_json(PROFILES_FILE, data)
     return data["profiles"][data["active"]]
 
@@ -608,6 +679,52 @@ def clear_vesktop_background(data: dict, profile_id: str) -> dict:
     return profile
 
 
+def set_spotifast_background(data: dict, profile_id: str, image_path: str) -> dict:
+    """Copy an image into ~/Pictures/spotifast and assign it to a profile."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    source = Path(image_path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"Image not found: {image_path}")
+    if source.suffix.lower() not in IMAGE_EXTENSIONS:
+        raise ValueError(f"Unsupported image format: {source.suffix}")
+
+    SPOTIFAST_DIR.mkdir(parents=True, exist_ok=True)
+    target = SPOTIFAST_DIR / f"{profile_id}{source.suffix.lower()}"
+    if source != target and not (target.exists() and same_file_content(source, target)):
+        shutil.copy2(source, target)
+
+    for old in SPOTIFAST_DIR.glob(f"{profile_id}.*"):
+        try:
+            if old.is_file() and old != target and old.suffix.lower() in IMAGE_EXTENSIONS:
+                old.unlink()
+        except OSError:
+            pass
+
+    profile = data["profiles"][profile_id]
+    profile["spotifastBackgroundEnabled"] = True
+    profile["spotifastBackground"] = str(target)
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    if data.get("active") == profile_id:
+        update_spotifast(profile)
+    return profile
+
+
+def clear_spotifast_background(data: dict, profile_id: str) -> dict:
+    """Disable the Spotifast background for a profile."""
+    if profile_id not in data["profiles"]:
+        raise ValueError(f"Unknown profile: {profile_id}")
+    profile = data["profiles"][profile_id]
+    profile["spotifastBackgroundEnabled"] = False
+    profile["spotifastBackground"] = ""
+    data["profiles"][profile_id] = profile
+    save_json(PROFILES_FILE, data)
+    if data.get("active") == profile_id:
+        update_spotifast(profile)
+    return profile
+
+
 def rotate_wallpaper(data: dict, profile_id: str | None = None) -> dict:
     """Switch the active profile to the next wallpaper in its folder.
 
@@ -671,6 +788,12 @@ def main() -> None:
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "clear-vesktop-background":
             profile = clear_vesktop_background(data, sys.argv[2])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "set-spotifast-background":
+            profile = set_spotifast_background(data, sys.argv[2], sys.argv[3])
+            print(json.dumps(profile, ensure_ascii=False))
+        elif command == "clear-spotifast-background":
+            profile = clear_spotifast_background(data, sys.argv[2])
             print(json.dumps(profile, ensure_ascii=False))
         elif command == "rotate-wallpaper":
             profile = rotate_wallpaper(data, sys.argv[2] if len(sys.argv) > 2 else None)
