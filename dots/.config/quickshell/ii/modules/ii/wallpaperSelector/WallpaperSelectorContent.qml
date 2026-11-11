@@ -196,8 +196,9 @@ MouseArea {
                             },
                             {
                                 icon: "wallpaper",
-                                name: "Wallpapers",
-                                path: `${Directories.pictures}/Wallpapers`
+                                name: "Mode wallpapers",
+                                path: ProfileManager.activeProfile?.wallpaperFolder
+                                    ?? `${Directories.pictures}/Wallpapers`
                             },
                             ...(Config.options.policies.weeb === 1 ? [
                                     {

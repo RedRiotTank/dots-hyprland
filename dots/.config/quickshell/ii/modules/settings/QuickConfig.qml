@@ -98,7 +98,7 @@ ContentPage {
                         randomWallProc.running = true;
                     }
                     StyledToolTip {
-                        text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")
+                        text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to the active mode's wallpapers folder")
                     }
                 }
                 RippleButtonWithIcon {
@@ -113,7 +113,7 @@ ContentPage {
                         randomWallProc.running = true;
                     }
                     StyledToolTip {
-                        text: Translation.tr("Random osu! seasonal background\nImage is saved to ~/Pictures/Wallpapers")
+                        text: Translation.tr("Random osu! seasonal background\nImage is saved to the active mode's wallpapers folder")
                     }
                 }
                 RippleButtonWithIcon {

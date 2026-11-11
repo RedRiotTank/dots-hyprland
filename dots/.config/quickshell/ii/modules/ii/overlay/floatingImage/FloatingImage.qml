@@ -16,7 +16,10 @@ StyledOverlayWidget {
 
     onImagePickerRequested: OverlayContext.requestFloatingImageSource(root.identifier)
 
-    property string imageSource: root.persistentStateEntry.imageSource || Config.options.overlay.floatingImage.imageSource
+    // Each desktop mode owns its sticker slots. Do not fall back to the global
+    // default here: that made an empty slot in one mode show the sticker of
+    // another mode. spawnFloatingImage() resolves the default when needed.
+    property string imageSource: root.persistentStateEntry.imageSource ?? ""
     property real scaleFactor: root.persistentStateEntry.scale ?? Config.options.overlay.floatingImage.scale
     property int imageWidth: 0
     property int imageHeight: 0

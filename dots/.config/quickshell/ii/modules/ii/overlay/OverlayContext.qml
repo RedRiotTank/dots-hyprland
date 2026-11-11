@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
+import qs.modules.common.functions
 
 Singleton {
     id: root
@@ -81,10 +82,18 @@ Singleton {
             const state = Persistent.states.overlay[identifier];
             if (!state) continue;
 
-            state.imageSource = source.length > 0 ? source : root.defaultFloatingImageSource();
+            const initialSource = source.length > 0 ? source : root.defaultFloatingImageSource();
+            state.imageSource = initialSource;
             if (screenName.length > 0) state.screenName = screenName;
             state.pinned = false;
             state.clickthrough = false;
+
+            // Keep the image inside the active mode's own stickers folder.
+            if (initialSource.length > 0) {
+                ProfileManager.importSticker(ProfileManager.activeId, initialSource, (result, exitCode) => {
+                    if (exitCode === 0 && result?.path) state.imageSource = result.path;
+                });
+            }
 
             Persistent.states.overlay.open.push(identifier);
             return identifier;
@@ -92,33 +101,52 @@ Singleton {
         return "";
     }
 
+    function stickerFolder(): string {
+        return ProfileManager.activeProfile?.stickersFolder
+            ?? `${Quickshell.env("HOME")}/.local/share/redOpinion_IlogicalImpulse/${ProfileManager.activeId}/stickers`;
+    }
+
+    function shellQuotedPath(value): string {
+        const text = String(value ?? "").trim();
+        return text.length > 0 ? `'${StringUtils.shellSingleQuoteEscape(text)}'` : '"$HOME"';
+    }
+
     function requestFloatingImageSource(identifier: string): void {
         if (!root.floatingImagesEnabled) return;
         const state = Persistent.states.overlay[identifier];
         if (!state) return;
         root.pickerTargetIdentifier = identifier;
+        const folder = root.stickerFolder();
+        pickImageProcess.command = ["bash", "-c", `
+            command -v kdialog >/dev/null 2>&1 || {
+                notify-send -a "Floating image" -i "dialog-error" "kdialog is not installed"
+                exit 1
+            }
+            mkdir -p ${root.shellQuotedPath(folder)}
+            kdialog --title "Select floating image" \\
+                --getopenfilename ${root.shellQuotedPath(folder)} \\
+                "Images (*.png *.jpg *.jpeg *.gif *.webp *.avif *.bmp)"
+        `];
         pickImageProcess.running = true;
     }
 
     Process {
         id: pickImageProcess
         running: false
-        command: ["bash", "-c", `
-            command -v kdialog >/dev/null 2>&1 || {
-                notify-send -a "Floating image" -i "dialog-error" "kdialog is not installed"
-                exit 1
-            }
-            kdialog --title "Select floating image" \\
-                --getopenfilename "$HOME/Pictures" \\
-                "Images (*.png *.jpg *.jpeg *.gif *.webp *.avif *.bmp)"
-        `]
+        command: ["bash", "-c", `kdialog --getopenfilename "$HOME" "Images (*.png *.jpg *.jpeg *.gif *.webp *.avif *.bmp)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
                 const identifier = root.pickerTargetIdentifier;
                 if (path.length > 0 && identifier.length > 0) {
                     const state = Persistent.states.overlay[identifier];
-                    if (state) state.imageSource = path;
+                    if (state) {
+                        // Keep sticker files inside the active mode's own
+                        // stickers folder instead of ~/Pictures.
+                        ProfileManager.importSticker(ProfileManager.activeId, path, (result, exitCode) => {
+                            state.imageSource = exitCode === 0 && result?.path ? result.path : path;
+                        });
+                    }
                 }
                 root.pickerTargetIdentifier = "";
             }

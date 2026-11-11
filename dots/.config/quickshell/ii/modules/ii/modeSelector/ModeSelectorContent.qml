@@ -2,6 +2,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import QtQml
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -111,15 +112,27 @@ Item {
         });
     }
 
-    function browseFolder() {
-        pickFolderProcess.running = true;
+    function shellQuotedPath(value) {
+        const text = String(value ?? "").trim();
+        return text.length > 0 ? `'${StringUtils.shellSingleQuoteEscape(text)}'` : '"$HOME"';
+    }
+
+    function pickerCommand(folder, title) {
+        return ["bash", "-c",
+            `mkdir -p ${root.shellQuotedPath(folder)}; `
+            + `kdialog --title ${root.shellQuotedPath(title)} `
+            + `--getopenfilename ${root.shellQuotedPath(folder)} `
+            + `"Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`
+        ];
     }
 
     function browseImage() {
+        pickImageProcess.command = root.pickerCommand(root.draft?.wallpaperFolder, "Select wallpaper");
         pickImageProcess.running = true;
     }
 
     function browseVesktopImage() {
+        pickVesktopImageProcess.command = root.pickerCommand(root.draft?.vesktopFolder, "Select Vesktop background");
         pickVesktopImageProcess.running = true;
     }
 
@@ -152,6 +165,7 @@ Item {
     }
 
     function browseSpotifastImage() {
+        pickSpotifastImageProcess.command = root.pickerCommand(root.draft?.spotifastFolder, "Select Spotifast background");
         pickSpotifastImageProcess.running = true;
     }
 
@@ -184,6 +198,7 @@ Item {
     }
 
     function browseNotificationImage() {
+        pickNotificationImageProcess.command = root.pickerCommand(root.draft?.notificationsFolder, "Select notification art");
         pickNotificationImageProcess.running = true;
     }
 
@@ -245,21 +260,9 @@ Item {
     }
 
     Process {
-        id: pickFolderProcess
-        running: false
-        command: ["bash", "-c", `kdialog --getexistingdirectory "$HOME/Pictures/Wallpapers"`]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const path = text.trim();
-                if (path.length > 0) root.updateDraft({ wallpaperFolder: path });
-            }
-        }
-    }
-
-    Process {
         id: pickImageProcess
         running: false
-        command: ["bash", "-c", `kdialog --getopenfilename "$HOME/Pictures/Wallpapers" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        command: ["bash", "-c", `kdialog --getopenfilename "$HOME" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
@@ -271,7 +274,7 @@ Item {
     Process {
         id: pickVesktopImageProcess
         running: false
-        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/vesktop"; kdialog --getopenfilename "$HOME/Pictures/vesktop" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        command: ["bash", "-c", `kdialog --getopenfilename "$HOME" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
@@ -283,7 +286,7 @@ Item {
     Process {
         id: pickSpotifastImageProcess
         running: false
-        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/spotifast"; kdialog --getopenfilename "$HOME/Pictures/spotifast" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        command: ["bash", "-c", `kdialog --getopenfilename "$HOME" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
@@ -295,7 +298,7 @@ Item {
     Process {
         id: pickNotificationImageProcess
         running: false
-        command: ["bash", "-c", `mkdir -p "$HOME/Pictures/notifications"; kdialog --getopenfilename "$HOME/Pictures/notifications" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
+        command: ["bash", "-c", `kdialog --getopenfilename "$HOME" "Images (*.png *.jpg *.jpeg *.webp *.gif *.avif *.bmp)"`]
         stdout: StdioCollector {
             onStreamFinished: {
                 const path = text.trim();
@@ -545,10 +548,13 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
                         Layout.fillHeight: false
-                        text: root.draft?.name ?? ""
                         placeholderText: Translation.tr("Profile name")
                         onEditingFinished: root.updateDraft({ name: text })
                         onAccepted: root.updateDraft({ name: text })
+
+                        Binding on text {
+                            value: root.draft?.name ?? ""
+                        }
                     }
 
                     StyledText {
@@ -556,23 +562,15 @@ Item {
                         color: Appearance.colors.colSubtext
                         font.pixelSize: Appearance.font.pixelSize.smaller
                     }
-                    RowLayout {
+                    ToolbarTextField {
                         Layout.fillWidth: true
-                        spacing: 4
+                        Layout.preferredHeight: 36
+                        Layout.fillHeight: false
+                        readOnly: true
+                        placeholderText: Translation.tr("Managed automatically")
 
-                        ToolbarTextField {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            Layout.fillHeight: false
-                            text: root.draft?.wallpaperFolder ?? ""
-                            placeholderText: "/home/user/Pictures/Wallpapers/mode"
-                            onEditingFinished: root.updateDraft({ wallpaperFolder: text })
-                            onAccepted: root.updateDraft({ wallpaperFolder: text })
-                        }
-                        IconToolbarButton {
-                            implicitHeight: 36
-                            text: "folder_open"
-                            onClicked: root.browseFolder()
+                        Binding on text {
+                            value: root.draft?.wallpaperFolder ?? ""
                         }
                     }
 
@@ -589,10 +587,13 @@ Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 36
                             Layout.fillHeight: false
-                            text: root.draft?.wallpaper ?? ""
-                            placeholderText: "/home/user/Pictures/Wallpapers/mode/wallpaper.jpg"
+                            placeholderText: Translation.tr("Choose an image from this mode")
                             onEditingFinished: root.updateDraft({ wallpaper: text })
                             onAccepted: root.updateDraft({ wallpaper: text })
+
+                            Binding on text {
+                                value: root.draft?.wallpaper ?? ""
+                            }
                         }
                         IconToolbarButton {
                             implicitHeight: 36
@@ -617,8 +618,11 @@ Item {
                             Layout.preferredHeight: 36
                             Layout.fillHeight: false
                             readOnly: true
-                            text: root.draft?.vesktopBackground ?? ""
-                            placeholderText: Translation.tr("~/Pictures/vesktop/<profile>.jpg")
+                            placeholderText: Translation.tr("No Vesktop background")
+
+                            Binding on text {
+                                value: root.draft?.vesktopBackground ?? ""
+                            }
                         }
                         IconToolbarButton {
                             implicitHeight: 36
@@ -626,7 +630,7 @@ Item {
                             onClicked: root.browseVesktopImage()
 
                             StyledToolTip {
-                                text: Translation.tr("Choose the Vesktop background for this mode.\nThe image is copied to ~/Pictures/vesktop.")
+                                text: Translation.tr("Choose the Vesktop background for this mode.\nThe image is stored in this mode's vesktop folder.")
                             }
                         }
                         IconToolbarButton {
@@ -657,8 +661,11 @@ Item {
                             Layout.preferredHeight: 36
                             Layout.fillHeight: false
                             readOnly: true
-                            text: root.draft?.spotifastBackground ?? ""
-                            placeholderText: Translation.tr("~/Pictures/spotifast/<profile>.jpg")
+                            placeholderText: Translation.tr("No Spotifast background")
+
+                            Binding on text {
+                                value: root.draft?.spotifastBackground ?? ""
+                            }
                         }
                         IconToolbarButton {
                             implicitHeight: 36
@@ -666,7 +673,7 @@ Item {
                             onClicked: root.browseSpotifastImage()
 
                             StyledToolTip {
-                                text: Translation.tr("Choose the Spotifast background for this mode.\nThe image is copied to ~/Pictures/spotifast.")
+                                text: Translation.tr("Choose the Spotifast background for this mode.\nThe image is stored in this mode's spotifast folder.")
                             }
                         }
                         IconToolbarButton {
@@ -697,8 +704,11 @@ Item {
                             Layout.preferredHeight: 36
                             Layout.fillHeight: false
                             readOnly: true
-                            text: root.draft?.notificationImage ?? ""
-                            placeholderText: Translation.tr("~/Pictures/notifications/<profile>.gif")
+                            placeholderText: Translation.tr("No notification art")
+
+                            Binding on text {
+                                value: root.draft?.notificationImage ?? ""
+                            }
                         }
                         IconToolbarButton {
                             implicitHeight: 36
@@ -706,7 +716,7 @@ Item {
                             onClicked: root.browseNotificationImage()
 
                             StyledToolTip {
-                                text: Translation.tr("Choose the art for the notification panel.\nThe image is copied to ~/Pictures/notifications.")
+                                text: Translation.tr("Choose the art for the notification panel.\nThe image is stored in this mode's notifications folder.")
                             }
                         }
                         IconToolbarButton {
@@ -730,7 +740,6 @@ Item {
                         Layout.fillWidth: true
                         icon: "timer"
                         text: Translation.tr("Change wallpaper every N seconds")
-                        value: root.draft?.wallpaperInterval ?? 0
                         from: 0
                         to: 86400
                         stepSize: 30
@@ -738,6 +747,13 @@ Item {
                             if (!root.draft) return;
                             if (value === (root.draft.wallpaperInterval ?? 0)) return;
                             root.updateDraft({ wallpaperInterval: value });
+                        }
+
+                        // Use a Binding element instead of a property binding.
+                        // Editing a SpinBox breaks a regular binding, which
+                        // made the interval look shared by every profile.
+                        Binding on value {
+                            value: root.draft?.wallpaperInterval ?? 0
                         }
                     }
 
