@@ -16,10 +16,13 @@ Item {
     required property var screen
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(screen)
     readonly property var toplevels: ToplevelManager.toplevels
+    readonly property int workspaceBase: HyprlandData.workspaceBaseForMonitor(monitor?.id ?? 0)
+    readonly property int activeWorkspaceId: monitor?.activeWorkspace?.id ?? 1
     // Clamp to avoid lock-screen temp workspace (2147483647 - N) leaking into UI
-    readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
+    readonly property int effectiveLocalWorkspaceId: Math.max(1, Math.min(
+        HyprlandData.workspacesPerMonitor, activeWorkspaceId - workspaceBase))
     readonly property int workspacesShown: Config.options.overview.rows * Config.options.overview.columns
-    readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
+    readonly property int workspaceGroup: Math.floor((effectiveLocalWorkspaceId - 1) / workspacesShown)
     property bool monitorIsFocused: (Hyprland.focusedMonitor?.name == monitor.name)
     property var windows: HyprlandData.windowList
     property var windowByAddress: HyprlandData.windowByAddress
@@ -58,7 +61,7 @@ Item {
     // workspace group. Coordinates are relative to the overview canvas.
     readonly property var selectableWindows: {
         const result = [];
-        const groupStart = root.workspaceGroup * root.workspacesShown;
+        const groupStart = root.workspaceBase + root.workspaceGroup * root.workspacesShown;
         const groupEnd = groupStart + root.workspacesShown;
         for (const toplevel of ToplevelManager.toplevels.values) {
             const address = `0x${toplevel.HyprlandToplevel?.address}`;
@@ -96,7 +99,7 @@ Item {
             root.selectedWindowAddress = "";
             return;
         }
-        const onActiveWorkspace = root.selectableWindows.find(window => window.workspace === root.effectiveActiveWorkspaceId);
+        const onActiveWorkspace = root.selectableWindows.find(window => window.workspace === root.activeWorkspaceId);
         root.selectedWindowAddress = (onActiveWorkspace ?? root.selectableWindows[0]).address;
     }
 
@@ -173,13 +176,15 @@ Item {
     Component.onCompleted: root.resetSelection()
 
     function getWsRow(ws) {
-        // 1-indexed workspace, 0-indexed row
-        var normalRow = Math.floor((ws - 1) / Config.options.overview.columns) % Config.options.overview.rows;
+        // 1-indexed local workspace, 0-indexed row
+        var localWs = ws - root.workspaceBase;
+        var normalRow = Math.floor((localWs - 1) / Config.options.overview.columns) % Config.options.overview.rows;
         return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - normalRow - 1 : normalRow);
     }
     function getWsColumn(ws) {
-        // 1-indexed workspace, 0-indexed column
-        var normalCol = (ws - 1) % Config.options.overview.columns;
+        // 1-indexed local workspace, 0-indexed column
+        var localWs = ws - root.workspaceBase;
+        var normalCol = (localWs - 1) % Config.options.overview.columns;
         return (Config.options.overview.orderRightLeft ? Config.options.overview.columns - normalCol - 1 : normalCol);
     }
     function getWsInCell(ri, ci) {
@@ -221,7 +226,8 @@ Item {
                             id: workspace
                             required property int index
                             property int colIndex: index
-                            property int workspaceValue: root.workspaceGroup * root.workspacesShown + getWsInCell(row.index, colIndex)
+                            property int workspaceLocalValue: root.workspaceGroup * root.workspacesShown + getWsInCell(row.index, colIndex)
+                            property int workspaceValue: root.workspaceBase + workspaceLocalValue
                             property color defaultWorkspaceColor: Appearance.colors.colSurfaceContainerLow
                             property color hoveredWorkspaceColor: ColorUtils.mix(defaultWorkspaceColor, Appearance.colors.colLayer1Hover, 0.1)
                             property color hoveredBorderColor: Appearance.colors.colLayer2Hover
@@ -243,7 +249,7 @@ Item {
 
                             StyledText {
                                 anchors.centerIn: parent
-                                text: workspace.workspaceValue
+                                text: workspace.workspaceLocalValue
                                 font {
                                     pixelSize: root.workspaceNumberSize * root.scale
                                     weight: Font.DemiBold
@@ -298,7 +304,9 @@ Item {
                         return ToplevelManager.toplevels.values.filter((toplevel) => {
                             const address = `0x${toplevel.HyprlandToplevel?.address}`
                             var win = windowByAddress[address]
-                            const inWorkspaceGroup = (root.workspaceGroup * root.workspacesShown < win?.workspace?.id && win?.workspace?.id <= (root.workspaceGroup + 1) * root.workspacesShown)
+                            const groupStart = root.workspaceBase + root.workspaceGroup * root.workspacesShown;
+                            const groupEnd = groupStart + root.workspacesShown;
+                            const inWorkspaceGroup = (groupStart < win?.workspace?.id && win?.workspace?.id <= groupEnd)
                             return inWorkspaceGroup;
                         })
                     }
@@ -423,8 +431,8 @@ Item {
 
             Rectangle { // Focused workspace indicator
                 id: focusedWorkspaceIndicator
-                property int rowIndex: getWsRow(root.effectiveActiveWorkspaceId)
-                property int colIndex: getWsColumn(root.effectiveActiveWorkspaceId)
+                property int rowIndex: getWsRow(root.activeWorkspaceId)
+                property int colIndex: getWsColumn(root.activeWorkspaceId)
                 x: (root.workspaceImplicitWidth + workspaceSpacing) * colIndex
                 y: (root.workspaceImplicitHeight + workspaceSpacing) * rowIndex
                 z: root.windowZ

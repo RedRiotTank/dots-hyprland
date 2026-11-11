@@ -119,6 +119,23 @@ The last active profile is restored automatically at login. A preview-based mode
 available with `Super + Shift + W`, and profiles can be created, edited, applied, or deleted
 without leaving the shell.
 
+### Independent workspaces per monitor
+
+Every monitor now has its own local workspace sequence rather than sharing the global
+Hyprland numbers:
+
+- each monitor shows `1, 2, 3...` in its own bar;
+- `Super + 1..0` switches workspaces only on the focused monitor;
+- `Super + Alt + 1..0` sends the focused window to a local workspace on the same monitor;
+- `Super + Left/Right`, `Super + Page Up/Down` and scrolling over the workspace widget cycle
+  the focused monitor;
+- workspace rules are generated dynamically when monitors are connected, including at startup.
+
+Hyprland workspace ids are still global internally. The fork gives each monitor a disjoint
+block (`monitor 0 -> 1..10`, `monitor 1 -> 11..20`, and so on) and both the Lua helpers and
+the bar translate them back to the local `1..N` shown on screen. The fork currently
+exposes 10 local workspaces per monitor, matching the default bar layout.
+
 ### New Music tab
 
 This fork adds a **Music** tab to the left sidebar. It combines the existing lyrics workflow
