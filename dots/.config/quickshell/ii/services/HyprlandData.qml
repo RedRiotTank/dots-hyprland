@@ -22,6 +22,22 @@ Singleton {
     property var monitors: []
     property var layers: ({})
 
+    // Each monitor owns a numeric block of workspaces. This must match the
+    // workspaceGroupSize / per-monitor rules in the Hyprland Lua config.
+    readonly property int workspacesPerMonitor: 10
+
+    function workspaceBaseForMonitor(monitorId) {
+        return Math.max(0, Number(monitorId ?? 0)) * root.workspacesPerMonitor;
+    }
+
+    function localWorkspaceIndex(workspaceId, monitorId) {
+        return Number(workspaceId ?? 1) - root.workspaceBaseForMonitor(monitorId);
+    }
+
+    function workspaceIdForLocal(monitorId, localIndex) {
+        return root.workspaceBaseForMonitor(monitorId) + Number(localIndex);
+    }
+
     // Convenient stuff
 
     function toplevelsForWorkspace(workspace) {

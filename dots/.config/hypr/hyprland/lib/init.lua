@@ -19,9 +19,40 @@ function create_if_not_exists(path)
    return false
 end
 
+-- Each monitor owns the numeric block:
+--   monitor id 0 -> 1..workspaceGroupSize
+--   monitor id 1 -> workspaceGroupSize+1..2*workspaceGroupSize
+-- Keeping the blocks disjoint is required because Hyprland workspace ids are
+-- global, even though the bar shows them as local 1..N on every monitor.
+function workspace_base_for_monitor(monitor)
+    monitor = monitor or hl.get_active_monitor()
+    local monitor_id = monitor and monitor.id or 0
+    return monitor_id * workspaceGroupSize
+end
+
+function workspace_local_id(i, monitor)
+    return workspace_base_for_monitor(monitor) + i
+end
+
 function workspace_in_group(i)
-    local curr = hl.get_active_workspace().id
-    local newVal = math.floor((curr - 1) / workspaceGroupSize) * workspaceGroupSize + i
-    -- hl.notification.create({ text = "curr " .. curr .. " floor " .. math.floor(curr / 10) .. " new " .. newVal, duration = 5000 })
-    return newVal
+    return workspace_local_id(i)
+end
+
+function active_local_workspace_index(monitor)
+    monitor = monitor or hl.get_active_monitor()
+    if not monitor then return 1 end
+    local workspace = monitor.active_workspace or hl.get_active_workspace(monitor)
+    local workspace_id = workspace and workspace.id or (workspace_base_for_monitor(monitor) + 1)
+    local index = workspace_id - workspace_base_for_monitor(monitor)
+    if index < 1 or index > workspaceGroupSize then
+        index = ((workspace_id - 1) % workspaceGroupSize) + 1
+    end
+    return index
+end
+
+function workspace_relative(offset, monitor)
+    local index = active_local_workspace_index(monitor) + offset
+    while index < 1 do index = index + workspaceGroupSize end
+    while index > workspaceGroupSize do index = index - workspaceGroupSize end
+    return workspace_local_id(index, monitor)
 end

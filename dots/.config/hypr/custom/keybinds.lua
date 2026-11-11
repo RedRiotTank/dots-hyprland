@@ -67,9 +67,13 @@ hl.bind("SUPER + K", hl.dsp.exec_cmd("dolphin"), { description = "App: File mana
 hl.unbind("SUPER + Left")
 hl.unbind("SUPER + Right")
 
--- Move both displays simultaneously with arrows
-hl.bind("SUPER + Right", hl.dsp.exec_cmd("hyprctl --batch 'dispatch focusmonitor HDMI-A-2; dispatch workspace +2; dispatch focusmonitor DP-1; dispatch workspace +2'"), { description = "Workspace: Next pair" })
-hl.bind("SUPER + Left", hl.dsp.exec_cmd("hyprctl --batch 'dispatch focusmonitor HDMI-A-2; dispatch workspace -2; dispatch focusmonitor DP-1; dispatch workspace -2'"), { description = "Workspace: Previous pair" })
+-- Move only the focused monitor; every display has its own local workspaces.
+hl.bind("SUPER + Right", function()
+    hl.dispatch(hl.dsp.focus({ workspace = workspace_relative(1) }))
+end, { description = "Workspace: Next on this monitor" })
+hl.bind("SUPER + Left", function()
+    hl.dispatch(hl.dsp.focus({ workspace = workspace_relative(-1) }))
+end, { description = "Workspace: Previous on this monitor" })
 
 -- ====================================================================
 -- 7. WEEB / SOBER MODES AND WALLPAPERS

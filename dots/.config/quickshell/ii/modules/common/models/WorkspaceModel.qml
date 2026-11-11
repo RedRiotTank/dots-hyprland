@@ -11,10 +11,15 @@ NestableObject {
     readonly property var liveMonitorData: HyprlandData.monitors.find(m => m.id === monitor.id)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
     readonly property int activeWorkspace: monitor?.activeWorkspace?.id ?? 1
+    readonly property int workspaceBase: HyprlandData.workspaceBaseForMonitor(monitor?.id ?? 0)
+    readonly property int localActiveWorkspace: {
+        const value = activeWorkspace - workspaceBase;
+        return Math.max(1, Math.min(HyprlandData.workspacesPerMonitor, value));
+    }
     readonly property bool currentWorkspaceNotFake: activeWindow?.activated ?? false // Active empty workspace = fake. At least, that's how I like to call it.
     readonly property int fakeWorkspace: currentWorkspaceNotFake ? -9999 : activeWorkspace
     readonly property int shownCount: C.Config.options.bar.workspaces.shown
-    readonly property int group: Math.floor((activeWorkspace - 1) / shownCount)
+    readonly property int group: Math.floor((localActiveWorkspace - 1) / shownCount)
     readonly property var specialWorkspace: liveMonitorData?.specialWorkspace
     readonly property string specialWorkspaceName: specialWorkspace?.name.replace("special:", "") ?? "special"
     readonly property bool specialWorkspaceActive: specialWorkspaceName !== ""
@@ -27,10 +32,16 @@ NestableObject {
     })
 
     function getWorkspaceId(group, index) {
-        return group * root.shownCount + index + 1;
+        return root.workspaceBase + group * root.shownCount + index + 1;
     }
     function getWorkspaceIdAt(index) {
         return root.getWorkspaceId(root.group, index);
+    }
+    function getWorkspaceNumber(group, index) {
+        return group * root.shownCount + index + 1;
+    }
+    function getWorkspaceNumberAt(index) {
+        return root.getWorkspaceNumber(root.group, index);
     }
 
     // Function to update workspaceOccupied
