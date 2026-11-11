@@ -57,5 +57,5 @@ if status is-interactive
     end
 end
 
-# Added by the Antigravity CLI installer
-set -gx PATH "$HOME/.local/bin" $PATH
+# Make locally installed tools available without duplicating PATH entries.
+fish_add_path -g "$HOME/.local/bin"
