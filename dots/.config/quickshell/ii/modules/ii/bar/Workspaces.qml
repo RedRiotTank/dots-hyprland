@@ -277,6 +277,43 @@ ButtonMouseArea {
                             maskSpreadAtMin: 1
                         }
                     }
+
+                    // Extra-window count: the main app icon stays untouched and
+                    // a tiny "+N" badge tells how many other windows share the
+                    // workspace.
+                    Rectangle {
+                        id: windowCountBadge
+                        visible: !root.superPressAndHeld
+                            && Config.options?.bar.workspaces.showAppIcons
+                            && wsApp.biggestWindow
+                            && wsApp.additionalWindowCount > 0
+                        anchors {
+                            top: parent.top
+                            right: parent.right
+                            topMargin: 1
+                            rightMargin: 1
+                        }
+                        implicitHeight: Math.max(9, Math.round(root.workspaceButtonWidth * 0.38))
+                        implicitWidth: Math.max(
+                            implicitHeight,
+                            windowCountText.implicitWidth + Math.round(implicitHeight * 0.5)
+                        )
+                        radius: implicitHeight / 2
+                        color: Appearance.colors.colPrimary
+                        z: 10
+
+                        StyledText {
+                            id: windowCountText
+                            anchors.centerIn: parent
+                            text: `+${wsApp.additionalWindowCount}`
+                            color: Appearance.colors.colOnPrimary
+                            font {
+                                pixelSize: Math.max(7, Math.round(root.workspaceButtonWidth * 0.30))
+                                weight: Font.DemiBold
+                                family: Appearance.font.family.numbers
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -360,6 +397,8 @@ ButtonMouseArea {
     component WorkspaceItem: Item {
         required property int index
         readonly property int wsId: wsModel.getWorkspaceIdAt(index)
+        readonly property int windowCount: wsModel.windowCounts[index] ?? 0
+        readonly property int additionalWindowCount: Math.max(0, windowCount - 1)
         implicitWidth: root.vertical ? root.barThickness : root.workspaceButtonWidth
         implicitHeight: root.vertical ? root.workspaceButtonWidth : root.barThickness
     }
