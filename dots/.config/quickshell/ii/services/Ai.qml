@@ -28,13 +28,8 @@ Singleton {
 
     signal responseFinished()
 
-    readonly property string terminalSystemPrompt: "Eres un asistente de terminal Linux en CachyOS/Arch. Responde ÚNICAMENTE con el comando ejecutable de Bash/Zsh necesario para cumplir la petición del usuario. No añadas texto explicativo, ni introducciones, ni comentarios antes o después. Solo el comando limpio o el bloque de código."
-    property bool terminalMode: Persistent.states?.ai?.terminalMode ?? false
-    property bool terminalAutoRun: Persistent.states?.ai?.terminalAutoRun ?? true
-
     property string systemPrompt: {
-        let prompt = root.terminalMode ? root.terminalSystemPrompt : (Config.options?.ai?.systemPrompt ?? "");
-        if (root.terminalMode) return prompt;
+        let prompt = Config.options?.ai?.systemPrompt ?? "";
         for (let key in root.promptSubstitutions) {
             // prompt = prompt.replaceAll(key, root.promptSubstitutions[key]);
             // QML/JS doesn't support replaceAll, so use split/join
@@ -522,83 +517,6 @@ Singleton {
         Config.options.ai.tool = tool;
         return true;
     }
-
-    function setTerminalMode(enabled: bool) {
-        root.terminalMode = enabled;
-        if (Persistent.states?.ai)
-            Persistent.states.ai.terminalMode = enabled;
-        root.addMessage(
-            Translation.tr("Terminal mode %1").arg(enabled ? Translation.tr("enabled") : Translation.tr("disabled")),
-            root.interfaceRole
-        );
-    }
-
-    function setTerminalAutoRun(enabled: bool) {
-        root.terminalAutoRun = enabled;
-        if (Persistent.states?.ai)
-            Persistent.states.ai.terminalAutoRun = enabled;
-        root.addMessage(
-            Translation.tr("Terminal auto-run %1").arg(enabled ? Translation.tr("enabled") : Translation.tr("disabled")),
-            root.interfaceRole
-        );
-    }
-
-    function extractTerminalCommand(content: string): string {
-        const blocks = CF.StringUtils.splitMarkdownBlocks(content || "");
-        const codeBlock = blocks.find(block => block.type === "code");
-        if (codeBlock)
-            return String(codeBlock.content || "").trim();
-        return blocks
-            .filter(block => block.type === "text")
-            .map(block => block.content)
-            .join("\n")
-            .trim();
-    }
-
-    function isUnsafeAutoCommand(command: string): bool {
-        if (command.length > 4000) return true;
-        return /(\brm\b|\brmdir\b|\bdd\b|\bmkfs|\bfdisk\b|\bparted\b|\bshutdown\b|\breboot\b|\bpoweroff\b|\bhalt\b|\bkill(all)?\b|\bpkill\b|\bchmod\b|\bchown\b|\bsudo\b|\bsu\b|\bsystemctl\s+(stop|disable|mask)\b|\bpacman\s+-R|\bflatpak\s+uninstall\b|\bsed\s+-i\b|\btruncate\b|>\s*\/|mkinitcpio|grub|bootctl|curl[^|]*\|\s*(ba)?sh|wget[^|]*\|\s*(ba)?sh)/i.test(command);
-    }
-
-    function executeTerminalCommand(command: string) {
-        if (!command || command.trim().length === 0) return;
-        Quickshell.execDetached(["bash", "-lc", command]);
-    }
-
-    function autoExecuteTerminalCommand(message: AiMessageData) {
-        if (!message?.terminalMode || !root.terminalAutoRun || message.terminalExecuted)
-            return;
-        const command = root.extractTerminalCommand(message.content);
-        if (command.length === 0)
-            return;
-        if (root.isUnsafeAutoCommand(command)) {
-            root.addMessage(
-                Translation.tr("Auto-run skipped for safety. Use Ejecutar if you want to run it:\n\n```bash\n%1\n```").arg(command),
-                root.interfaceRole
-            );
-            return;
-        }
-        message.terminalExecuted = true;
-        root.addMessage(
-            Translation.tr("Running automatically:\n\n```bash\n%1\n```").arg(command),
-            root.interfaceRole
-        );
-        root.executeTerminalCommand(command);
-    }
-
-    function copyText(text: string) {
-        if (!text || text.length === 0) return;
-        Quickshell.execDetached(["wl-copy", "--", text]);
-    }
-
-    function runTerminalCommand(command: string) {
-        if (!command || command.trim().length === 0) return;
-        const terminal = Config.options.apps.terminal || "kitty -1";
-        Quickshell.execDetached([
-            "bash", "-c",
-            `${terminal} -e bash -lc '${CF.StringUtils.shellSingleQuoteEscape(command)}'`
-        ]);
-    }
     
     function getTemperature() {
         return root.temperature;
@@ -671,7 +589,6 @@ Singleton {
                 root.postResponseHook();
                 root.postResponseHook = null; // Reset hook after use
             }
-            root.autoExecuteTerminalCommand(requester.message);
             root.saveChat("lastSession")
             root.responseFinished()
         }
@@ -692,10 +609,7 @@ Singleton {
             const endpoint = root.currentApiStrategy.buildEndpoint(model);
             const messageArray = root.messageIDs.map(id => root.messageByID[id]);
             const filteredMessageArray = messageArray.filter(message => message.role !== Ai.interfaceRole);
-            const toolList = root.terminalMode
-                ? root.tools[model.api_format]["none"]
-                : root.tools[model.api_format][root.currentTool];
-            const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, toolList, root.pendingFilePath);
+            const data = root.currentApiStrategy.buildRequestData(model, filteredMessageArray, root.systemPrompt, root.temperature, root.tools[model.api_format][root.currentTool], root.pendingFilePath);
             // console.log("[Ai] Request data: ", JSON.stringify(data, null, 2));
 
             let requestHeaders = {
@@ -710,7 +624,6 @@ Singleton {
                 "rawContent": "",
                 "thinking": true,
                 "done": false,
-                "terminalMode": root.terminalMode,
             });
             const id = idForMessage(requester.message);
             root.messageIDs = [...root.messageIDs, id];
@@ -857,7 +770,6 @@ Singleton {
         message.functionPending = false; // User decided, no more "thinking"
 
         const responseMessage = createFunctionOutputMessage(message.functionName, "", false);
-        responseMessage.thoughtSignature = message.thoughtSignature;
         const id = idForMessage(responseMessage);
         root.messageIDs = [...root.messageIDs, id];
         root.messageByID[id] = responseMessage;
@@ -912,15 +824,6 @@ Singleton {
                 addFunctionOutputMessage(name, Translation.tr("Invalid arguments. Must provide `command`."));
                 return;
             }
-            if (root.terminalAutoRun && !root.isUnsafeAutoCommand(args.command)) {
-                root.addMessage(
-                    Translation.tr("Running automatically:\n\n```bash\n%1\n```").arg(args.command),
-                    root.interfaceRole
-                );
-                message.functionPending = true;
-                root.approveCommand(message);
-                return;
-            }
             const contentToAppend = `\n\n**Command execution request**\n\n\`\`\`command\n${args.command}\n\`\`\``;
             message.rawContent += contentToAppend;
             message.content += contentToAppend;
@@ -946,10 +849,7 @@ Singleton {
                 "functionName": message.functionName,
                 "functionCall": message.functionCall,
                 "functionResponse": message.functionResponse,
-                "thoughtSignature": message.thoughtSignature,
                 "visibleToUser": message.visibleToUser,
-                "terminalMode": message.terminalMode,
-                "terminalExecuted": message.terminalExecuted,
             })
         })
     }
@@ -1005,10 +905,7 @@ Singleton {
                     "functionName": message.functionName,
                     "functionCall": message.functionCall,
                     "functionResponse": message.functionResponse,
-                    "thoughtSignature": message.thoughtSignature ?? "",
                     "visibleToUser": message.visibleToUser,
-                    "terminalMode": message.terminalMode ?? false,
-                    "terminalExecuted": message.terminalExecuted ?? false,
                 });
             }
         } catch (e) {
