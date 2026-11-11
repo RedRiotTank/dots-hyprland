@@ -247,7 +247,7 @@ def migrate_named_profile_media(profile_id: str, profile_name: str, legacy_root:
     Profile names are checked too: an old profile called "miku" may have kept
     its id as ``new-mode-2`` while its stickers lived in ``stickers/miku``.
     """
-    names = {profile_id, slugify(profile_name or profile_id)}
+    names = {profile_id, profile_name, slugify(profile_name or profile_id)}
     for name in names:
         if not name:
             continue
