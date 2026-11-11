@@ -504,6 +504,7 @@ def delete_profile(data: dict, profile_id: str) -> dict:
         raise ValueError(f"Unknown profile: {profile_id}")
     if len(data["profiles"]) <= 1:
         raise ValueError("At least one profile is required")
+    remove_vesktop_images(profile_id)
     del data["profiles"][profile_id]
     if data["active"] == profile_id:
         data["active"] = next(iter(data["profiles"]))
@@ -547,6 +548,16 @@ def set_wallpaper(data: dict, image_path: str) -> dict:
     update_waypaper(profile)
     (STATE_DIR / f"wallpaper-{profile['id']}").write_text(str(target) + "\n", encoding="utf-8")
     return profile
+
+
+def remove_vesktop_images(profile_id: str) -> None:
+    """Remove the managed Vesktop copies for a deleted profile."""
+    try:
+        for entry in VESKTOP_DIR.glob(f"{profile_id}.*"):
+            if entry.is_file() and entry.suffix.lower() in IMAGE_EXTENSIONS:
+                entry.unlink()
+    except OSError:
+        pass
 
 
 def set_vesktop_background(data: dict, profile_id: str, image_path: str) -> dict:
