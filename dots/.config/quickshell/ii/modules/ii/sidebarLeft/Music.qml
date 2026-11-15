@@ -30,6 +30,8 @@ Item {
 
     readonly property string helperPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/lyrics/lrclib.py`
     readonly property string recommendationLauncherPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/media/recommendation_launcher.py`
+    readonly property string recommendationsHelperPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/media/recommendations.py`
+    readonly property int recommendationTarget: 8
     readonly property var activePlayer: MprisController.activePlayer
     readonly property string artUrl: root.activePlayer?.trackArtUrl ?? ""
     readonly property string artKey: Qt.md5(root.artUrl)
@@ -41,6 +43,7 @@ Item {
     property var recommendations: []
     property bool recommendationsLoading: false
     property string recommendationsError: ""
+    property string recommendationsRequestKey: ""
     readonly property real trackLength: root.activePlayer?.length ?? 0
     readonly property string elapsedText: StringUtils.friendlyTimeForSeconds(root.currentPosition)
     readonly property string remainingText: "-" + StringUtils.friendlyTimeForSeconds(Math.max(0, root.trackLength - root.currentPosition))
@@ -208,19 +211,23 @@ Item {
 
     function loadRecommendations() {
         root.recommendationsError = "";
+        const title = root.trackTitle.trim();
         const artist = root.trackArtist.trim();
-        if (artist.length === 0 || artist === Translation.tr("Unknown Artist")) {
+        if (title.length === 0) {
             root.recommendations = [];
             root.recommendationsLoading = false;
+            root.recommendationsRequestKey = "";
             return;
         }
 
+        root.recommendations = [];
         root.recommendationsLoading = true;
-        const query = encodeURIComponent(artist);
+        root.recommendationsRequestKey = root.currentTrackKey;
         recsProcess.running = false;
         recsProcess.command = [
-            "curl", "-sS", "--max-time", "12",
-            `https://api.deezer.com/search?q=${query}&limit=12`
+            "python3", root.recommendationsHelperPath,
+            title, artist, root.trackAlbum.trim(),
+            String(root.recommendationTarget)
         ];
         recsProcess.running = true;
     }
@@ -250,6 +257,8 @@ Item {
             root.loadedTrackKey = "";
             root.recommendations = [];
             root.recommendationsLoading = false;
+            root.recommendationsError = "";
+            root.recommendationsRequestKey = "";
             lyricsProcess.running = false;
             recsProcess.running = false;
             return;
@@ -360,16 +369,20 @@ Item {
     Process {
         id: recsProcess
         running: false
-        command: ["curl", "-sS", "--max-time", "12", ""]
+        command: ["python3", root.recommendationsHelperPath, "", "", "", String(root.recommendationTarget)]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (root.recommendationsRequestKey !== root.currentTrackKey)
+                    return;
                 root.recommendationsLoading = false;
                 try {
                     const parsed = JSON.parse(text);
-                    const currentTitle = root.trackTitle.toLowerCase();
-                    root.recommendations = (parsed.data ?? [])
-                        .filter(track => track?.title?.toLowerCase() !== currentTitle)
-                        .slice(0, 8);
+                    const tracks = Array.isArray(parsed.data) ? parsed.data : [];
+                    root.recommendations = tracks.slice(0, root.recommendationTarget);
+                    root.recommendationsError = root.recommendations.length === 0
+                        && String(parsed.error ?? "").length > 0
+                        ? Translation.tr("Could not load recommendations")
+                        : "";
                 } catch (error) {
                     root.recommendations = [];
                     root.recommendationsError = Translation.tr("Could not load recommendations");
@@ -712,87 +725,106 @@ Item {
                 }
             }
 
-            StyledListView {
-                id: recommendationsList
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: root.recommendations.length > 0
-                clip: true
-                spacing: 4
-                model: root.recommendations
+                Layout.minimumHeight: 80
 
-                delegate: RippleButton {
-                    id: recommendationButton
-                    required property var modelData
+                StyledListView {
+                    id: recommendationsList
+                    anchors.fill: parent
+                    visible: root.recommendations.length > 0
+                    clip: true
+                    spacing: 4
+                    model: root.recommendations
 
-                    width: recommendationsList.width
-                    implicitHeight: 52
-                    buttonRadius: Appearance.rounding.small
-                    colBackground: Appearance.colors.colLayer1
-                    colBackgroundHover: Appearance.colors.colLayer1Hover
-                    onClicked: root.openRecommendation(recommendationButton.modelData)
+                    delegate: RippleButton {
+                        id: recommendationButton
+                        required property var modelData
 
-                    contentItem: RowLayout {
-                        anchors {
-                            fill: parent
-                            margins: 6
-                        }
-                        spacing: 8
+                        width: recommendationsList.width
+                        implicitHeight: 52
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: Appearance.colors.colLayer1
+                        colBackgroundHover: Appearance.colors.colLayer1Hover
+                        onClicked: root.openRecommendation(recommendationButton.modelData)
 
-                        Rectangle {
-                            Layout.preferredWidth: 40
-                            Layout.preferredHeight: 40
-                            radius: Appearance.rounding.small
-                            color: Appearance.colors.colLayer2
-                            clip: true
-
-                            StyledImage {
-                                anchors.fill: parent
-                                source: recommendationButton.modelData.album?.cover_small ?? ""
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                cache: true
+                        contentItem: RowLayout {
+                            anchors {
+                                fill: parent
+                                margins: 6
                             }
-                        }
+                            spacing: 8
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
+                            Rectangle {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 40
+                                radius: Appearance.rounding.small
+                                color: Appearance.colors.colLayer2
+                                clip: true
 
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: recommendationButton.modelData.title ?? ""
-                                color: Appearance.colors.colOnSurface
-                                elide: Text.ElideRight
-                                font.pixelSize: Appearance.font.pixelSize.small
+                                StyledImage {
+                                    anchors.fill: parent
+                                    source: recommendationButton.modelData.album?.cover_small ?? ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    cache: true
+                                }
                             }
-                            StyledText {
+
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                text: recommendationButton.modelData.artist?.name ?? ""
+                                spacing: 0
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: recommendationButton.modelData.title ?? ""
+                                    color: Appearance.colors.colOnSurface
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: recommendationButton.modelData.artist?.name ?? ""
+                                    color: Appearance.colors.colSubtext
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                }
+                            }
+
+                            MaterialSymbol {
+                                text: "open_in_new"
+                                iconSize: Appearance.font.pixelSize.small
                                 color: Appearance.colors.colSubtext
-                                elide: Text.ElideRight
-                                font.pixelSize: Appearance.font.pixelSize.smaller
                             }
-                        }
-
-                        MaterialSymbol {
-                            text: "open_in_new"
-                            iconSize: Appearance.font.pixelSize.small
-                            color: Appearance.colors.colSubtext
                         }
                     }
                 }
-            }
 
-            StyledText {
-                visible: !root.recommendationsLoading
-                    && root.recommendations.length === 0
-                    && root.recommendationsError.length > 0
-                Layout.fillWidth: true
-                text: root.recommendationsError
-                color: Appearance.colors.colSubtext
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                wrapMode: Text.Wrap
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 24, 280)
+                    visible: !root.recommendationsLoading
+                        && root.recommendations.length === 0
+                    spacing: 6
+
+                    MaterialSymbol {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: "search_off"
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colSubtext
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.recommendationsError.length > 0
+                            ? root.recommendationsError
+                            : Translation.tr("No recommendations found")
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        wrapMode: Text.Wrap
+                    }
+                }
             }
         }
     }
