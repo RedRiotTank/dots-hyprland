@@ -40,9 +40,8 @@ Item {
     property string pendingArtUrl: ""
     property string pendingArtKey: ""
     property string recommendationArtUrl: ""
-    property string recommendationStartTrackKey: ""
-    property string recommendationStartArtKey: ""
-    property string recommendationStartAlbum: ""
+    property string recommendationTargetTitle: ""
+    property string recommendationTargetArtist: ""
     property list<real> visualizerPoints: []
     property var recommendations: []
     property bool recommendationsLoading: false
@@ -64,17 +63,10 @@ Item {
     }
 
     readonly property string displayedArt: {
-        // The cover of a recommendation can be shown immediately, before
-        // MPRIS publishes the new track's artwork.
+        // Keep the recommendation's cover for the whole track. Swapping to
+        // the MPRIS copy of the same cover causes a visible flash.
         if (root.recommendationArtUrl.length > 0)
             return root.recommendationArtUrl;
-        // If MPRIS has not published a new cover after a recommendation,
-        // do not fall back to the previous album's cover.
-        if (root.recommendationStartArtKey.length > 0
-            && root.artKey === root.recommendationStartArtKey
-            && root.currentTrackKey !== root.recommendationStartTrackKey
-            && root.trackAlbum !== root.recommendationStartAlbum)
-            return "";
         if (root.artUrl.startsWith("file://")) return root.artUrl;
         if (root.artUrl.startsWith("/")) return Qt.resolvedUrl(root.artUrl);
         if (root.artUrl.length > 0
@@ -83,16 +75,33 @@ Item {
         return "";
     }
 
-    function maybeClearPendingRecommendationArt() {
+    function recommendationTargetMatchesCurrent() {
+        if (root.recommendationArtUrl.length === 0) return false;
+        const targetTitle = root.recommendationTargetTitle.trim().toLowerCase();
+        const currentTitle = root.trackTitle.trim().toLowerCase();
+        if (targetTitle.length === 0 || currentTitle.length === 0) return false;
+
+        const exactTitle = currentTitle === targetTitle;
+        if (!exactTitle
+            && !currentTitle.includes(targetTitle)
+            && !targetTitle.includes(currentTitle))
+            return false;
+        if (exactTitle) return true;
+
+        const targetArtists = root.recommendationTargetArtist.toLowerCase()
+            .split(/\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b)\s*/)
+            .filter(name => name.length > 0);
+        if (targetArtists.length === 0) return true;
+        const currentArtist = root.trackArtist.toLowerCase();
+        return targetArtists.some(name => currentArtist.includes(name));
+    }
+
+    function clearRecommendationArtIfNeeded() {
         if (root.recommendationArtUrl.length === 0) return;
-        if (root.currentTrackKey === root.recommendationStartTrackKey) return;
-        if (root.artKey !== root.recommendationStartArtKey
-            && root.artUrl.length > 0
-            && root.downloadedArtKey === root.artKey) {
-            root.recommendationArtUrl = "";
-            root.recommendationStartArtKey = "";
-            root.recommendationStartAlbum = "";
-        }
+        if (root.recommendationTargetMatchesCurrent()) return;
+        root.recommendationArtUrl = "";
+        root.recommendationTargetTitle = "";
+        root.recommendationTargetArtist = "";
     }
 
     readonly property bool hasLyrics: root.lines.length > 0
@@ -175,11 +184,9 @@ Item {
         }
         if (root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")) {
             root.downloadedArtKey = root.artKey;
-            root.maybeClearPendingRecommendationArt();
             return;
         }
         if (root.downloadedArtKey === root.artKey) {
-            root.maybeClearPendingRecommendationArt();
             return;
         }
         if (coverArtDownloader.running) {
@@ -279,12 +286,13 @@ Item {
         );
         if (cover.length > 0) {
             root.recommendationArtUrl = cover;
-            root.recommendationStartTrackKey = root.currentTrackKey;
-            root.recommendationStartArtKey = root.artKey;
-            root.recommendationStartAlbum = root.trackAlbum;
+            root.recommendationTargetTitle = title;
+            root.recommendationTargetArtist = artist;
             recommendationArtTimer.restart();
         } else {
             root.recommendationArtUrl = "";
+            root.recommendationTargetTitle = "";
+            root.recommendationTargetArtist = "";
             recommendationArtTimer.stop();
         }
         recommendationLauncher.command = [
@@ -312,6 +320,8 @@ Item {
             root.recommendationsRequestKey = "";
             root.downloadedArtKey = "";
             root.recommendationArtUrl = "";
+            root.recommendationTargetTitle = "";
+            root.recommendationTargetArtist = "";
             recommendationArtTimer.stop();
             lyricsProcess.running = false;
             recsProcess.running = false;
@@ -322,7 +332,7 @@ Item {
         root.trackArtist = track.artist;
         root.trackAlbum = track.album;
         root.syncPosition();
-        root.maybeClearPendingRecommendationArt();
+        root.clearRecommendationArtIfNeeded();
 
         // Loading lyrics, recommendations and the cava visualizer is deferred
         // until the Music page is actually visible. This keeps fast track
@@ -407,7 +417,6 @@ Item {
             const finishedKey = coverArtDownloader.artKey;
             if (exitCode === 0 && finishedKey === root.artKey) {
                 root.downloadedArtKey = finishedKey;
-                root.maybeClearPendingRecommendationArt();
             }
 
             if (root.pendingArtKey.length > 0) {
@@ -419,7 +428,6 @@ Item {
                     root.startArtDownload(nextUrl, nextKey);
                 else if (nextKey === root.artKey && exitCode === 0) {
                     root.downloadedArtKey = nextKey;
-                    root.maybeClearPendingRecommendationArt();
                 }
             }
         }
@@ -487,9 +495,15 @@ Item {
 
     Timer {
         id: recommendationArtTimer
-        interval: 10000
+        interval: 15000
         repeat: false
-        onTriggered: root.recommendationArtUrl = ""
+        onTriggered: {
+            if (!root.recommendationTargetMatchesCurrent()) {
+                root.recommendationArtUrl = "";
+                root.recommendationTargetTitle = "";
+                root.recommendationTargetArtist = "";
+            }
+        }
     }
 
     NumberAnimation {
