@@ -144,6 +144,17 @@ MouseArea {
         }
     }
 
+    // Now-playing card, shown above the visualizer while media is available.
+    LockMediaPlayer {
+        id: mediaPlayer
+        anchors {
+            horizontalCenter: parent.horizontalCenter
+            bottom: visualizerContainer.top
+            bottomMargin: 24
+        }
+        width: Math.min(440, parent.width * 0.72)
+    }
+
     // Main toolbar: password box
     Toolbar {
         id: mainIsland
