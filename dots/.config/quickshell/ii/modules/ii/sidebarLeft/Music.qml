@@ -581,19 +581,23 @@ Item {
             color: Appearance.colors.colLayer1
             clip: true
 
-            StyledImage {
+            Image {
+                id: albumArt
                 anchors.fill: parent
                 source: root.displayedArt
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                cache: false
-                retainWhileLoading: false
-                visible: root.displayedArt.length > 0
+                cache: true
+                // Keep the previous cover visible until the new one is ready.
+                // StyledImage's opacity animation made the art blink on every
+                // source change.
+                retainWhileLoading: true
+                visible: root.displayedArt.length > 0 && status !== Image.Error
             }
 
             Rectangle {
                 anchors.fill: parent
-                visible: root.displayedArt.length === 0
+                visible: root.displayedArt.length === 0 || albumArt.status === Image.Error
                 color: Appearance.colors.colLayer1
 
                 MaterialSymbol {
