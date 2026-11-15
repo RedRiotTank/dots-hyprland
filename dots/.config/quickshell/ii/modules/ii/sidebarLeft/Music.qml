@@ -50,6 +50,7 @@ Item {
         const desktopEntry = String(player?.desktopEntry ?? "").toLowerCase();
         const dbusName = String(player?.dbusName ?? "").toLowerCase();
         const description = `${identity} ${desktopEntry} ${dbusName}`;
+        if (description.includes("spotifast")) return "spotifast";
         if (description.includes("spotify")) return "spotify";
         if (description.includes("youtube music") || description.includes("ytmusic")) return "youtube-music";
         return "youtube";

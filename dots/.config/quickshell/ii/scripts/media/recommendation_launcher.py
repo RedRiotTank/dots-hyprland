@@ -188,14 +188,20 @@ def open_browser_url(url: str) -> None:
             set_cursor_no_warps(False)
 
 
-def set_spotify_no_focus(enabled: bool) -> bool:
-    """Temporarily stop Spotify from raising its window on MPRIS OpenUri."""
+def player_window_class(player: str) -> str:
+    """Return the Hyprland window class used by the selected MPRIS player."""
+    return "spotifast" if player == "spotifast" else "spotify"
+
+
+def set_player_no_focus(enabled: bool, player: str = "spotify") -> bool:
+    """Temporarily stop the target player from raising its window on OpenUri."""
     if enabled:
+        window_class = player_window_class(player)
         code = (
             'if not _recommendation_spotify_no_focus then '
             '_recommendation_spotify_no_focus = hl.window_rule({'
             'name="recommendation-spotify-no-focus", '
-            'match={class="^(Spotify)$"}, no_focus=true}) '
+            f'match={{class="^({window_class})$"}}, no_focus=true}}) '
             'else _recommendation_spotify_no_focus:set_enabled(true) end'
         )
     else:
@@ -212,7 +218,7 @@ def set_spotify_no_focus(enabled: bool) -> bool:
         )
         return result.returncode == 0
     except Exception as error:
-        log(f"spotify no-focus rule failed: {type(error).__name__}: {error}")
+        log(f"{player} no-focus rule failed: {type(error).__name__}: {error}")
         return False
 
 
@@ -263,31 +269,32 @@ def set_animations(enabled: bool) -> None:
         pass
 
 
-def recommend_without_focus(uri: str) -> bool:
-    """Start the track through MPRIS without raising Spotify."""
+def recommend_without_focus(uri: str, player: str = "spotify") -> bool:
+    """Start the track through MPRIS without raising the player window."""
     focus_state = capture_focus_state()
     previous_no_warps = get_cursor_no_warps()
     if not previous_no_warps:
-        # no_focus prevents Spotify from taking keyboard focus, but Hyprland
+        # no_focus prevents the player from taking keyboard focus, but Hyprland
         # still warps the pointer to its window. Disable warps for this click.
         set_cursor_no_warps(True)
-    no_focus_rule = set_spotify_no_focus(True)
+    no_focus_rule = set_player_no_focus(True, player)
     if not no_focus_rule:
         # Older Hyprland versions may not expose hl.window_rule through
         # hyprctl eval. Hide the workspace switch instead.
         set_animations(False)
+    player_class = player_window_class(player)
     try:
-        open_spotify_uri(uri)
+        open_spotify_uri(uri, player)
         active = hyprctl_json(["activewindow", "-j"])
         focus_stolen = (
-            str(active.get("class", "")).lower() == "spotify"
-            and str(focus_state.get("class", "")).lower() != "spotify"
+            str(active.get("class", "")).lower() == player_class
+            and str(focus_state.get("class", "")).lower() != player_class
         )
         if focus_stolen or not no_focus_rule:
             restore_focus_state(focus_state)
     finally:
         if no_focus_rule:
-            set_spotify_no_focus(False)
+            set_player_no_focus(False, player)
         else:
             time.sleep(0.05)
             set_animations(True)
@@ -305,19 +312,24 @@ def open_url(url: str) -> None:
     )
 
 
-def open_spotify_uri(uri: str) -> None:
-    """Ask the running Spotify player to open the track, if possible."""
+def open_spotify_uri(uri: str, player: str = "spotify") -> None:
+    """Ask the running player to open the track, if possible."""
     if shutil.which("playerctl"):
+        command = ["playerctl"]
+        if player:
+            command.extend(["-p", player])
+        command.extend(["open", uri])
         try:
             result = subprocess.run(
-                ["playerctl", "open", uri],
+                command,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=8,
             )
             if result.returncode == 0:
-                log(f"playerctl open ok {uri}")
+                log(f"playerctl -p {player} open ok {uri}")
                 return
+            log(f"playerctl -p {player} open failed with exit code {result.returncode}")
         except Exception as error:
             log(f"playerctl open failed: {type(error).__name__}: {error}")
     open_url(uri)
@@ -582,24 +594,26 @@ def main() -> None:
     query = f"{title} {artist}".strip()
     log(f"launch platform={platform} title={title!r} artist={artist!r} isrc={isrc!r}")
 
-    if platform == "spotify":
+    if platform in ("spotify", "spotifast"):
         queries = []
         if isrc:
             queries.append(f"isrc:{isrc}")
         queries.extend([query, title, artist])
         uri = spotify_track_uri(queries)
         if uri:
-            if TOKEN_FILE.exists() and web_api_playback_allowed():
+            # The Spotify Web API can only control Spotify Connect devices,
+            # not Spotifast, so use its MPRIS OpenUri interface directly.
+            if platform == "spotify" and TOKEN_FILE.exists() and web_api_playback_allowed():
                 if spotify_play_track(uri):
                     record_web_api_playback(True)
                     return
                 record_web_api_playback(False)
             # Start the track through MPRIS with a temporary Hyprland
-            # no_focus rule, so Spotify does not raise itself or switch
+            # no_focus rule, so the player does not raise itself or switch
             # workspaces. Restore focus as a safety net.
-            recommend_without_focus(uri)
+            recommend_without_focus(uri, platform)
         else:
-            log("spotify direct lookup failed; falling back to search")
+            log(f"{platform} direct lookup failed; falling back to search")
             open_url("spotify:search:" + urllib.parse.quote(query))
         return
 
