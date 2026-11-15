@@ -39,6 +39,10 @@ Item {
     property string downloadedArtKey: ""
     property string pendingArtUrl: ""
     property string pendingArtKey: ""
+    property string recommendationArtUrl: ""
+    property string recommendationStartTrackKey: ""
+    property string recommendationStartArtKey: ""
+    property string recommendationStartAlbum: ""
     property list<real> visualizerPoints: []
     property var recommendations: []
     property bool recommendationsLoading: false
@@ -60,11 +64,37 @@ Item {
     }
 
     readonly property string displayedArt: {
-        if (root.artUrl.length === 0) return "";
+        // The cover of a recommendation can be shown immediately, before
+        // MPRIS publishes the new track's artwork.
+        if (root.recommendationArtUrl.length > 0)
+            return root.recommendationArtUrl;
+        // If MPRIS has not published a new cover after a recommendation,
+        // do not fall back to the previous album's cover.
+        if (root.recommendationStartArtKey.length > 0
+            && root.artKey === root.recommendationStartArtKey
+            && root.currentTrackKey !== root.recommendationStartTrackKey
+            && root.trackAlbum !== root.recommendationStartAlbum)
+            return "";
         if (root.artUrl.startsWith("file://")) return root.artUrl;
         if (root.artUrl.startsWith("/")) return Qt.resolvedUrl(root.artUrl);
-        return root.downloadedArtKey === root.artKey ? Qt.resolvedUrl(root.artFilePath) : "";
+        if (root.artUrl.length > 0
+            && root.downloadedArtKey === root.artKey)
+            return Qt.resolvedUrl(root.artFilePath);
+        return "";
     }
+
+    function maybeClearPendingRecommendationArt() {
+        if (root.recommendationArtUrl.length === 0) return;
+        if (root.currentTrackKey === root.recommendationStartTrackKey) return;
+        if (root.artKey !== root.recommendationStartArtKey
+            && root.artUrl.length > 0
+            && root.downloadedArtKey === root.artKey) {
+            root.recommendationArtUrl = "";
+            root.recommendationStartArtKey = "";
+            root.recommendationStartAlbum = "";
+        }
+    }
+
     readonly property bool hasLyrics: root.lines.length > 0
     readonly property int displayLine: root.activeLine >= 0 ? root.activeLine : 0
     readonly property string previousLyric: root.lines[root.displayLine - 1]?.text ?? ""
@@ -145,9 +175,13 @@ Item {
         }
         if (root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")) {
             root.downloadedArtKey = root.artKey;
+            root.maybeClearPendingRecommendationArt();
             return;
         }
-        if (root.downloadedArtKey === root.artKey) return;
+        if (root.downloadedArtKey === root.artKey) {
+            root.maybeClearPendingRecommendationArt();
+            return;
+        }
         if (coverArtDownloader.running) {
             // Keep only the newest request; starting a Process while it is
             // already running would keep downloading the previous artwork.
@@ -236,6 +270,23 @@ Item {
         if (!track) return;
         const title = String(track.title ?? "");
         const artist = String(track.artist?.name ?? "");
+        const cover = String(
+            track.album?.cover_big
+                ?? track.album?.cover_xl
+                ?? track.album?.cover_medium
+                ?? track.album?.cover_small
+                ?? ""
+        );
+        if (cover.length > 0) {
+            root.recommendationArtUrl = cover;
+            root.recommendationStartTrackKey = root.currentTrackKey;
+            root.recommendationStartArtKey = root.artKey;
+            root.recommendationStartAlbum = root.trackAlbum;
+            recommendationArtTimer.restart();
+        } else {
+            root.recommendationArtUrl = "";
+            recommendationArtTimer.stop();
+        }
         recommendationLauncher.command = [
             "python3", root.recommendationLauncherPath,
             root.playbackPlatform, title, artist, String(track.isrc ?? "")
@@ -259,6 +310,9 @@ Item {
             root.recommendationsLoading = false;
             root.recommendationsError = "";
             root.recommendationsRequestKey = "";
+            root.downloadedArtKey = "";
+            root.recommendationArtUrl = "";
+            recommendationArtTimer.stop();
             lyricsProcess.running = false;
             recsProcess.running = false;
             return;
@@ -268,6 +322,7 @@ Item {
         root.trackArtist = track.artist;
         root.trackAlbum = track.album;
         root.syncPosition();
+        root.maybeClearPendingRecommendationArt();
 
         // Loading lyrics, recommendations and the cava visualizer is deferred
         // until the Music page is actually visible. This keeps fast track
@@ -350,8 +405,10 @@ Item {
         command: ["bash", "-c", ""]
         onExited: (exitCode, exitStatus) => {
             const finishedKey = coverArtDownloader.artKey;
-            if (exitCode === 0 && finishedKey === root.artKey)
+            if (exitCode === 0 && finishedKey === root.artKey) {
                 root.downloadedArtKey = finishedKey;
+                root.maybeClearPendingRecommendationArt();
+            }
 
             if (root.pendingArtKey.length > 0) {
                 const nextUrl = root.pendingArtUrl;
@@ -360,8 +417,10 @@ Item {
                 root.pendingArtKey = "";
                 if (nextKey !== finishedKey)
                     root.startArtDownload(nextUrl, nextKey);
-                else if (nextKey === root.artKey && exitCode === 0)
+                else if (nextKey === root.artKey && exitCode === 0) {
                     root.downloadedArtKey = nextKey;
+                    root.maybeClearPendingRecommendationArt();
+                }
             }
         }
     }
@@ -424,6 +483,13 @@ Item {
         interval: 250
         repeat: false
         onTriggered: root.startTrackContent()
+    }
+
+    Timer {
+        id: recommendationArtTimer
+        interval: 10000
+        repeat: false
+        onTriggered: root.recommendationArtUrl = ""
     }
 
     NumberAnimation {
@@ -507,6 +573,7 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: false
+                retainWhileLoading: false
                 visible: root.displayedArt.length > 0
             }
 
