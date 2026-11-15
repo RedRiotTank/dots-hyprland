@@ -150,9 +150,9 @@ MouseArea {
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: visualizerContainer.top
-            bottomMargin: 24
+            bottomMargin: 30
         }
-        width: Math.min(440, parent.width * 0.72)
+        width: Math.min(720, parent.width * 0.66)
     }
 
     // Main toolbar: password box

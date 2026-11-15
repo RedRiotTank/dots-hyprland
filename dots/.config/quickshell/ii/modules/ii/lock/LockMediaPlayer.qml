@@ -44,7 +44,7 @@ Item {
 
     visible: opacity > 0
     opacity: root.hasMedia ? 1 : 0
-    implicitHeight: 88
+    implicitHeight: 144
 
     Behavior on opacity {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -80,8 +80,8 @@ Item {
         required property string iconName
         property bool primary: false
 
-        implicitWidth: primary ? 42 : 34
-        implicitHeight: primary ? 42 : 34
+        implicitWidth: primary ? 54 : 42
+        implicitHeight: primary ? 54 : 42
         buttonRadius: height / 2
         pointingHandCursor: true
 
@@ -102,7 +102,7 @@ Item {
             anchors.centerIn: parent
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            iconSize: button.primary ? Appearance.font.pixelSize.huge : Appearance.font.pixelSize.larger
+            iconSize: button.primary ? Appearance.font.pixelSize.hugeass : Appearance.font.pixelSize.huge
             fill: 1
             text: button.iconName
             color: button.primary
@@ -122,16 +122,16 @@ Item {
         RowLayout {
             anchors {
                 fill: parent
-                margins: 10
+                margins: 16
             }
-            spacing: 12
+            spacing: 16
 
             // Cover art
             Rectangle {
                 id: artBackground
-                Layout.preferredWidth: 64
-                Layout.preferredHeight: 64
-                radius: Appearance.rounding.small
+                Layout.preferredWidth: 96
+                Layout.preferredHeight: 96
+                radius: Appearance.rounding.normal
                 color: Appearance.colors.colLayer2
 
                 layer.enabled: true
@@ -162,14 +162,13 @@ Item {
             // Track information
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 210
-                spacing: 1
+                spacing: 4
 
                 StyledText {
                     Layout.fillWidth: true
                     text: root.title
                     color: Appearance.colors.colOnSurface
-                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.pixelSize: Appearance.font.pixelSize.larger
                     elide: Text.ElideRight
                     animateChange: true
                     animationDistanceY: 4
@@ -179,7 +178,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.artist || root.album
                     color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.pixelSize: Appearance.font.pixelSize.small
                     elide: Text.ElideRight
                     animateChange: true
                     animationDistanceY: 4
@@ -187,7 +186,7 @@ Item {
 
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 12
+                    Layout.preferredHeight: 16
 
                     StyledProgressBar {
                         anchors {
@@ -195,7 +194,7 @@ Item {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
-                        valueBarHeight: 3
+                        valueBarHeight: 4
                         valueBarWidth: 100
                         value: root.progress
                         wavy: root.playing
@@ -208,7 +207,7 @@ Item {
             // Playback controls
             RowLayout {
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 4
+                spacing: 6
 
                 MediaControlButton {
                     iconName: "skip_previous"
