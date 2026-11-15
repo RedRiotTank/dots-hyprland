@@ -29,7 +29,8 @@ It never uses sudo and does not modify Spotifast's settings, sign-in, playlists 
 An open Spotifast checks that file about twice a second and reloads the image without
 interrupting playback. The patch paints the image on the window's background layer, keeps
 the central page transparent, and leaves sidebars, the player bar and menus readable with a
-dark overlay and translucent fills.
+dark overlay and translucent fills. The page-header wash fades into the image instead of
+ending in an opaque colour band, so pages such as playlists keep a clean top edge.
 
 Images are stored in `~/Pictures/spotifast/<profile-id>.<ext>` (or a `<profile-id>/`
 folder). Choose or disable them from **Desktop modes** (`Super + Shift + W`).

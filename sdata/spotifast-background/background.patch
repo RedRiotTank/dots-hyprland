@@ -1,9 +1,9 @@
 diff --git a/src/background.rs b/src/background.rs
 new file mode 100644
-index 0000000..5fcf6ac
+index 0000000..474e8f7
 --- /dev/null
 +++ b/src/background.rs
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,181 @@
 +//! A per-desktop-mode image painted behind the main window.
 +//!
 +//! The desktop-mode helper writes the active image path to
@@ -148,11 +148,24 @@ index 0000000..5fcf6ac
 +    painter.rect_filled(screen, 0.0, Color32::from_black_alpha(OVERLAY_ALPHA));
 +}
 +
-+fn active(ctx: &Context) -> bool {
++pub fn active(ctx: &Context) -> bool {
 +    ctx.data(|data| {
 +        data.get_temp::<State>(Id::new(STATE_ID))
 +            .is_some_and(|state| state.texture.is_some())
 +    })
++}
++
++/// Blend a page header's wash into the image instead of ending in an opaque
++/// band. The wash keeps its colour but fades to transparent over the image.
++pub fn header_gradient(ctx: &Context, top: Color32, bottom: Color32) -> (Color32, Color32) {
++    if !active(ctx) {
++        return (top, bottom);
++    }
++    let alpha = ((top.a() as u16 * 3) / 5).min(150) as u8;
++    (
++        Color32::from_rgba_unmultiplied(top.r(), top.g(), top.b(), alpha),
++        Color32::TRANSPARENT,
++    )
 +}
 +
 +/// The central page becomes see-through so the image shows behind it.
@@ -211,7 +224,7 @@ index 829bca0..092c2c0 100644
          );
      let response = panel.show(ui, |ui| {
 diff --git a/src/ui/mod.rs b/src/ui/mod.rs
-index 2504a94..d1af865 100644
+index 2504a94..9ca3569 100644
 --- a/src/ui/mod.rs
 +++ b/src/ui/mod.rs
 @@ -39,6 +39,7 @@ use crate::theme::{self, Icon};
@@ -231,8 +244,16 @@ index 2504a94..d1af865 100644
          .show(ui, |ui| {
              let rect = ui.max_rect();
              let page = app.page().clone();
+@@ -326,6 +327,7 @@ fn central(app: &mut App, ui: &mut egui::Ui) {
+             // Countdown pages own their hero gradient. The generic artwork wash
+             // otherwise leaves an unrelated color band behind the search bar.
+             if !countdown && let Some((top, bottom)) = header_wash(&palette, overview, tint) {
++                let (top, bottom) = crate::background::header_gradient(ui.ctx(), top, bottom);
+                 widgets::paint_vertical_gradient(ui, header_rect(rect, scrolled), top, bottom);
+             }
+             ui.spacing_mut().item_spacing = vec2(8.0, 6.0);
 diff --git a/src/ui/player_bar.rs b/src/ui/player_bar.rs
-index 3f9c447..ff7bd74 100644
+index 6873ef9..e8767c8 100644
 --- a/src/ui/player_bar.rs
 +++ b/src/ui/player_bar.rs
 @@ -52,7 +52,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
