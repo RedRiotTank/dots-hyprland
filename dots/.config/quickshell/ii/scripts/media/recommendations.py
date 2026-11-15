@@ -166,7 +166,11 @@ def main() -> None:
         return str(items[0].get("id", "")) if items else ""
 
     # Artist searches are the best source: they stay relevant and usually
-    # provide more than enough tracks to fill the list.
+    # provide more than enough tracks to fill the list. Try the complete
+    # credit string first for names such as "Tyler, The Creator", then the
+    # individual artists for multi-artist credits.
+    if artist and normalized(artist) != normalized(primary_artist):
+        search(artist)
     for name in artist_names[:2]:
         search(name)
     search(f"{title} {primary_artist}".strip())
